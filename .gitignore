@@ -1,0 +1,45 @@
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Java / Maven
+target/
+.mvn/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+*.log
+
+# Instaladores (arquivos binários grandes)
+*.exe
+*.msi
+*.zip
+
+# Screenshots
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# H2 Database
+*.db
+*.mv.db
+*.trace.db
+
+

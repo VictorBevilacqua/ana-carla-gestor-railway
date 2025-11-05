@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: anacarla-postgres
+    environment:
+      POSTGRES_DB: anacarla
+      POSTGRES_USER: anacarla
+      POSTGRES_PASSWORD: anacarla_password_2025
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - anacarla-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U anacarla"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: anacarla-erp
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: anacarla
+      DB_USER: anacarla
+      DB_PASSWORD: anacarla_password_2025
+      JWT_SECRET: Ana-Carla-ERP-Secret-Key-Prod-2025-Change-This-Min-256-Bits-Required
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - anacarla-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  anacarla-network:
+    driver: bridge
+
