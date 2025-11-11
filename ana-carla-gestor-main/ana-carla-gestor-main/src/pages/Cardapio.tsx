@@ -1,10 +1,10 @@
-import { useState } from "react";
-import { dataStore, ItemCardapio, Categoria } from "@/lib/dataStore";
+import { useState, useEffect } from "react";
+import { cardapioAPI, CardapioItemDTO } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Salad, Drumstick, Coffee, Droplet, Utensils, Clipboard, Plus } from "lucide-react";
+import { Salad, Drumstick, Coffee, Droplet, Utensils, Clipboard, Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -13,7 +13,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-const categoriaIcons: Record<Categoria, React.ElementType> = {
+type Categoria = "Proteína" | "Salada" | "Acompanhamento" | "Bebida" | "Bowl";
+
+const categoriaIcons: Record<string, React.ElementType> = {
   Salada: Salad,
   Proteína: Drumstick,
   Acompanhamento: Coffee,
@@ -29,9 +31,9 @@ const formatarBRL = (valor: number): string => {
   }).format(valor);
 };
 
-const gerarTextoCardapioWhatsApp = (itens: ItemCardapio[]): string => {
-  const ordemCategorias: Categoria[] = ["Proteína", "Salada", "Acompanhamento", "Bebida", "Bowl"];
-  const grupos: Record<string, ItemCardapio[]> = {};
+const gerarTextoCardapioWhatsApp = (itens: CardapioItemDTO[]): string => {
+  const ordemCategorias: string[] = ["Proteína", "Salada", "Acompanhamento", "Bebida", "Bowl"];
+  const grupos: Record<string, CardapioItemDTO[]> = {};
 
   // Agrupar itens ativos por categoria
   itens
@@ -49,7 +51,7 @@ const gerarTextoCardapioWhatsApp = (itens: ItemCardapio[]): string => {
 
   // Ordenar categorias
   const catsOutras = Object.keys(grupos)
-    .filter((c) => !ordemCategorias.includes(c as Categoria))
+    .filter((c) => !ordemCategorias.includes(c))
     .sort((a, b) => a.localeCompare(b));
   const categoriasOrdenadas = [...ordemCategorias, ...catsOutras].filter(
     (c) => grupos[c]?.length
@@ -74,28 +76,50 @@ const gerarTextoCardapioWhatsApp = (itens: ItemCardapio[]): string => {
 };
 
 export default function Cardapio() {
-  const [items, setItems] = useState<ItemCardapio[]>(dataStore.cardapio);
+  const [items, setItems] = useState<CardapioItemDTO[]>([]);
+  const [loading, setLoading] = useState(true);
   const [dialogNovoOpen, setDialogNovoOpen] = useState(false);
   const [dialogEditarOpen, setDialogEditarOpen] = useState(false);
-  const [itemSelecionado, setItemSelecionado] = useState<ItemCardapio | null>(null);
+  const [itemSelecionado, setItemSelecionado] = useState<CardapioItemDTO | null>(null);
   
   const [novoNome, setNovoNome] = useState("");
   const [novaDescricao, setNovaDescricao] = useState("");
   const [novoPreco, setNovoPreco] = useState("");
   const [novaCategoria, setNovaCategoria] = useState<Categoria>("Proteína");
+  const [salvando, setSalvando] = useState(false);
 
   const [editNome, setEditNome] = useState("");
   const [editDescricao, setEditDescricao] = useState("");
   const [editPreco, setEditPreco] = useState("");
   const [editCategoria, setEditCategoria] = useState<Categoria>("Proteína");
 
-  const toggleAtivo = (id: string, ativo: boolean) => {
-    dataStore.updateItemCardapio(id, { ativo });
-    setItems([...dataStore.cardapio]);
-    toast.success(ativo ? "Item ativado" : "Item desativado");
+  useEffect(() => {
+    carregarItens();
+  }, []);
+
+  const carregarItens = async () => {
+    try {
+      setLoading(true);
+      const data = await cardapioAPI.listar();
+      setItems(data);
+    } catch (error: any) {
+      toast.error(`Erro ao carregar cardápio: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const criarNovoItem = () => {
+  const toggleAtivo = async (id: string, ativo: boolean) => {
+    try {
+      await cardapioAPI.ativarDesativar(id, ativo);
+      setItems(items.map(item => item.id === id ? { ...item, ativo } : item));
+      toast.success(ativo ? "Item ativado" : "Item desativado");
+    } catch (error: any) {
+      toast.error(`Erro ao ${ativo ? 'ativar' : 'desativar'} item: ${error.message}`);
+    }
+  };
+
+  const criarNovoItem = async () => {
     if (!novoNome.trim()) {
       toast.error("Digite o nome do item");
       return;
@@ -105,35 +129,40 @@ export default function Cardapio() {
       return;
     }
 
-    const novoItem: ItemCardapio = {
-      id: Math.random().toString(36).substring(7),
-      nome: novoNome,
-      descricao: novaDescricao,
-      preco: parseFloat(novoPreco),
-      categoria: novaCategoria,
-      ativo: true,
-    };
+    try {
+      setSalvando(true);
+      const novoItem = await cardapioAPI.criar({
+        nome: novoNome,
+        descricao: novaDescricao || undefined,
+        preco: parseFloat(novoPreco),
+        categoria: novaCategoria,
+        ativo: true,
+      });
 
-    dataStore.cardapio.push(novoItem);
-    setItems([...dataStore.cardapio]);
-    setDialogNovoOpen(false);
-    setNovoNome("");
-    setNovaDescricao("");
-    setNovoPreco("");
-    toast.success("Item criado com sucesso!");
+      setItems([...items, novoItem]);
+      setDialogNovoOpen(false);
+      setNovoNome("");
+      setNovaDescricao("");
+      setNovoPreco("");
+      toast.success("Item criado e salvo no banco!");
+    } catch (error: any) {
+      toast.error(`Erro ao criar item: ${error.message}`);
+    } finally {
+      setSalvando(false);
+    }
   };
 
-  const abrirEditar = (item: ItemCardapio) => {
+  const abrirEditar = (item: CardapioItemDTO) => {
     setItemSelecionado(item);
     setEditNome(item.nome);
     setEditDescricao(item.descricao || "");
     setEditPreco(item.preco.toString());
-    setEditCategoria(item.categoria);
+    setEditCategoria(item.categoria as Categoria);
     setDialogEditarOpen(true);
   };
 
-  const salvarEdicao = () => {
-    if (!itemSelecionado) return;
+  const salvarEdicao = async () => {
+    if (!itemSelecionado || !itemSelecionado.id) return;
     if (!editNome.trim()) {
       toast.error("Digite o nome do item");
       return;
@@ -143,16 +172,23 @@ export default function Cardapio() {
       return;
     }
 
-    dataStore.updateItemCardapio(itemSelecionado.id, {
-      nome: editNome,
-      descricao: editDescricao,
-      preco: parseFloat(editPreco),
-      categoria: editCategoria,
-    });
+    try {
+      setSalvando(true);
+      const itemAtualizado = await cardapioAPI.atualizar(itemSelecionado.id, {
+        nome: editNome,
+        descricao: editDescricao || undefined,
+        preco: parseFloat(editPreco),
+        categoria: editCategoria,
+      });
 
-    setItems([...dataStore.cardapio]);
-    setDialogEditarOpen(false);
-    toast.success("Item atualizado!");
+      setItems(items.map(item => item.id === itemSelecionado.id ? itemAtualizado : item));
+      setDialogEditarOpen(false);
+      toast.success("Item atualizado no banco!");
+    } catch (error: any) {
+      toast.error(`Erro ao atualizar item: ${error.message}`);
+    } finally {
+      setSalvando(false);
+    }
   };
 
   const copiarCardapioParaWhatsApp = async () => {
@@ -164,6 +200,14 @@ export default function Cardapio() {
       toast.error("Erro ao copiar. Tente novamente.");
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   const hasItensAtivos = items.some((item) => item.ativo);
 
@@ -207,7 +251,7 @@ export default function Cardapio() {
               <DialogHeader>
                 <DialogTitle>Adicionar Novo Item</DialogTitle>
                 <DialogDescription>
-                  Adicione um novo item ao cardápio
+                  Adicione um novo item ao cardápio (será salvo no PostgreSQL)
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
@@ -262,11 +306,11 @@ export default function Cardapio() {
                 </div>
               </div>
               <div className="flex justify-end gap-3">
-                <Button variant="outline" onClick={() => setDialogNovoOpen(false)}>
+                <Button variant="outline" onClick={() => setDialogNovoOpen(false)} disabled={salvando}>
                   Cancelar
                 </Button>
-                <Button onClick={criarNovoItem} className="gradient-primary text-white">
-                  Criar Item
+                <Button onClick={criarNovoItem} className="gradient-primary text-white" disabled={salvando}>
+                  {salvando ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Salvando...</> : "Criar Item"}
                 </Button>
               </div>
             </DialogContent>
@@ -280,7 +324,7 @@ export default function Cardapio() {
           <DialogHeader>
             <DialogTitle>Editar Item</DialogTitle>
             <DialogDescription>
-              Altere as informações do item
+              Altere as informações do item (será salvo no PostgreSQL)
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -332,11 +376,11 @@ export default function Cardapio() {
             </div>
           </div>
           <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setDialogEditarOpen(false)}>
+            <Button variant="outline" onClick={() => setDialogEditarOpen(false)} disabled={salvando}>
               Cancelar
             </Button>
-            <Button onClick={salvarEdicao} className="gradient-primary text-white">
-              Salvar Alterações
+            <Button onClick={salvarEdicao} className="gradient-primary text-white" disabled={salvando}>
+              {salvando ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Salvando...</> : "Salvar Alterações"}
             </Button>
           </div>
         </DialogContent>
@@ -344,7 +388,7 @@ export default function Cardapio() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {items.map((item) => {
-          const Icon = categoriaIcons[item.categoria];
+          const Icon = categoriaIcons[item.categoria] || Utensils;
           return (
             <Card key={item.id} className="shadow-custom-md border-0">
               <CardHeader>
@@ -360,12 +404,12 @@ export default function Cardapio() {
                   </div>
                   <Switch
                     checked={item.ativo}
-                    onCheckedChange={(checked) => toggleAtivo(item.id, checked)}
+                    onCheckedChange={(checked) => toggleAtivo(item.id!, checked)}
                   />
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
-                <p className="text-sm text-muted-foreground">{item.descricao}</p>
+                <p className="text-sm text-muted-foreground">{item.descricao || "Sem descrição"}</p>
                 <div className="flex items-center justify-between pt-2 border-t">
                   <span className="text-2xl font-bold text-primary">
                     {new Intl.NumberFormat("pt-BR", {
@@ -382,6 +426,14 @@ export default function Cardapio() {
           );
         })}
       </div>
+
+      {items.length === 0 && (
+        <Card className="shadow-custom-md border-0">
+          <CardContent className="py-12 text-center">
+            <p className="text-muted-foreground">Nenhum item no cardápio. Adicione um novo item!</p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

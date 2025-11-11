@@ -56,34 +56,76 @@ public class PedidoService {
     public PedidoDTO criar(PedidoDTO dto) {
         log.info("Criando novo pedido para cliente: {}", dto.getClienteId());
         
-        Pedido entity = pedidoMapper.toEntity(dto);
+        // Criar pedido
+        Pedido entity = new Pedido();
+        entity.setClienteId(dto.getClienteId());
+        entity.setStatus(dto.getStatus() != null ? dto.getStatus() : StatusPedido.RECEBIDO);
+        entity.setCanal(dto.getCanal());
+        entity.setDataCriacao(Instant.now());
+        entity.setObservacoes(dto.getObservacoes());
         
-        // Configurar data de criação se não fornecida
-        if (entity.getDataCriacao() == null) {
-            entity.setDataCriacao(Instant.now());
-        }
-        
-        // Configurar status inicial se não fornecido
-        if (entity.getStatus() == null) {
-            entity.setStatus(StatusPedido.RECEBIDO);
-        }
-        
-        // Adicionar itens ao pedido
+        // Calcular valor total e adicionar itens
+        BigDecimal valorTotal = BigDecimal.ZERO;
         if (dto.getItens() != null && !dto.getItens().isEmpty()) {
             for (PedidoItemDTO itemDto : dto.getItens()) {
-                PedidoItem item = pedidoMapper.toItemEntity(itemDto);
-                entity.addItem(item);
+                PedidoItem item = new PedidoItem();
+                item.setNome(itemDto.getNome());
+                item.setQuantidade(itemDto.getQuantidade());
+                item.setPrecoUnit(itemDto.getPrecoUnit());
+                item.setObservacoes(itemDto.getObservacoes());
+                item.setItemId(itemDto.getItemId());
+                item.setPedido(entity);
+                
+                entity.getItens().add(item);
+                valorTotal = valorTotal.add(item.getSubtotal());
             }
         }
-        
-        // Calcular valor total
-        BigDecimal valorTotal = entity.getItens().stream()
-                .map(PedidoItem::getSubtotal)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
         entity.setValorTotal(valorTotal);
         
         entity = pedidoRepository.save(entity);
         log.info("Pedido criado: {} - R$ {}", entity.getId(), entity.getValorTotal());
+        
+        // Atualizar data do último pedido do cliente
+        clienteMetricasService.atualizarUltimoPedido(entity.getClienteId(), entity.getDataCriacao());
+        
+        return pedidoMapper.toDTO(entity);
+    }
+
+    public PedidoDTO atualizar(UUID id, PedidoDTO dto) {
+        log.info("Atualizando pedido: {}", id);
+        
+        Pedido entity = pedidoRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Pedido não encontrado"));
+        
+        StatusPedido statusAnterior = entity.getStatus();
+        
+        // Atualizar campos básicos
+        if (dto.getObservacoes() != null) {
+            entity.setObservacoes(dto.getObservacoes());
+        }
+        
+        // Atualizar itens se fornecidos
+        if (dto.getItens() != null) {
+            entity.getItens().clear();
+            for (PedidoItemDTO itemDto : dto.getItens()) {
+                PedidoItem item = pedidoMapper.toItemEntity(itemDto);
+                entity.addItem(item);
+            }
+            
+            // Recalcular valor total
+            BigDecimal valorTotal = entity.getItens().stream()
+                    .map(PedidoItem::getSubtotal)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            entity.setValorTotal(valorTotal);
+        }
+        
+        entity = pedidoRepository.save(entity);
+        
+        // Se o status mudou para ENTREGUE, recalcular métricas
+        if (entity.getStatus() == StatusPedido.ENTREGUE && statusAnterior != StatusPedido.ENTREGUE) {
+            log.info("Pedido atualizado e entregue. Recalculando métricas do cliente {}", entity.getClienteId());
+            clienteMetricasService.recalcularMetricasCliente(entity.getClienteId());
+        }
         
         return pedidoMapper.toDTO(entity);
     }
@@ -115,6 +157,11 @@ public class PedidoService {
             
             // Recalcular métricas do cliente
             clienteMetricasService.recalcularMetricasCliente(entity.getClienteId());
+        } else if (novoStatus == StatusPedido.CANCELADO) {
+            // Se foi cancelado (finalizado), NÃO recalcular métricas
+            // As métricas já foram contabilizadas quando estava ENTREGUE
+            log.info("Pedido {} cancelado/finalizado. Métricas já foram contabilizadas quando estava ENTREGUE", id);
+            entity = pedidoRepository.save(entity);
         } else {
             entity = pedidoRepository.save(entity);
         }

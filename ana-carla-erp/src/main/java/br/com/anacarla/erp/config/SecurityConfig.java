@@ -27,7 +27,7 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity
+// @EnableMethodSecurity  // TEMPORÁRIO: Desabilitado para permitir acesso sem autenticação
 @RequiredArgsConstructor
 public class SecurityConfig {
 

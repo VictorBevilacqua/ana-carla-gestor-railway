@@ -1,62 +1,110 @@
-import { dataStore } from "@/lib/dataStore";
+import { useState, useEffect } from "react";
+import { pedidosAPI, PedidoDTO, clientesAPI, ClienteDTO } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { DollarSign, ShoppingBag, Users, TrendingUp, AlertCircle, Clock } from "lucide-react";
+import { DollarSign, ShoppingBag, Users, TrendingUp, AlertCircle, Clock, Loader2, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { parseISO } from "date-fns";
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const [pedidos, setPedidos] = useState<PedidoDTO[]>([]);
+  const [clientes, setClientes] = useState<ClienteDTO[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    carregarDados();
+  }, []);
+
+  const carregarDados = async () => {
+    try {
+      setLoading(true);
+      const [pedidosData, clientesData] = await Promise.all([
+        pedidosAPI.listar(),
+        clientesAPI.listar(),
+      ]);
+      setPedidos(pedidosData);
+      setClientes(clientesData);
+    } catch (error: any) {
+      console.error(`Erro ao carregar dados: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
 
-  const pedidosHoje = dataStore.pedidos.filter(
-    (p) => p.dataCriacao >= hoje
-  );
+  const pedidosHoje = pedidos.filter((p) => {
+    const dataPedido = p.dataCriacao ? new Date(parseISO(p.dataCriacao)) : new Date();
+    dataPedido.setHours(0, 0, 0, 0);
+    return dataPedido.getTime() === hoje.getTime();
+  });
 
   const receitaHoje = pedidosHoje
-    .filter((p) => p.pago)
-    .reduce((acc, p) => acc + p.total, 0);
+    .filter((p) => p.dataEntrega) // Pedidos que foram entregues (tem dataEntrega)
+    .reduce((acc, p) => acc + p.valorTotal, 0);
 
-  const pedidosFila = dataStore.pedidos.filter(
-    (p) => p.status === "Novo" || p.status === "Em preparo"
+  const pedidosFila = pedidos.filter(
+    (p) => p.status === "NOVO" || p.status === "EM_PREPARO"
   ).length;
 
   const trintaDiasAtras = new Date(hoje);
   trintaDiasAtras.setDate(trintaDiasAtras.getDate() - 30);
 
   const clientesAtivos = new Set(
-    dataStore.pedidos
-      .filter((p) => p.dataCriacao >= trintaDiasAtras)
+    pedidos
+      .filter((p) => {
+        const dataPedido = p.dataCriacao ? new Date(parseISO(p.dataCriacao)) : new Date();
+        return dataPedido >= trintaDiasAtras;
+      })
       .map((p) => p.clienteId)
   ).size;
 
-  const totalPedidos30d = dataStore.pedidos.filter(
-    (p) => p.dataCriacao >= trintaDiasAtras
-  ).length;
+  const pedidosEntregues30d = pedidos.filter((p) => {
+    const dataPedido = p.dataCriacao ? new Date(parseISO(p.dataCriacao)) : new Date();
+    return dataPedido >= trintaDiasAtras && p.dataEntrega; // Apenas pedidos que foram entregues
+  });
 
-  const receita30d = dataStore.pedidos
-    .filter((p) => p.dataCriacao >= trintaDiasAtras && p.pago)
-    .reduce((acc, p) => acc + p.total, 0);
+  console.log(`📊 Dashboard - Pedidos entregues (30d): ${pedidosEntregues30d.length}`);
 
-  const ticketMedio = totalPedidos30d > 0 ? receita30d / totalPedidos30d : 0;
+  const receita30d = pedidosEntregues30d.reduce((acc, p) => acc + p.valorTotal, 0);
+
+  const ticketMedio = pedidosEntregues30d.length > 0 ? receita30d / pedidosEntregues30d.length : 0;
+  
+  console.log(`💰 Receita 30d: R$ ${receita30d.toFixed(2)}`);
+  console.log(`🎯 Ticket Médio: R$ ${ticketMedio.toFixed(2)}`);
 
   // Alertas
   const alertas = [];
 
   // Clientes sem pedir há 30 dias
-  const clientesSemPedido = dataStore.clientes.filter((c) => {
-    if (!c.dataUltimoPedido) return false;
-    const diasSemPedido = Math.floor(
-      (hoje.getTime() - c.dataUltimoPedido.getTime()) / (1000 * 60 * 60 * 24)
-    );
-    return diasSemPedido >= 30;
+  const clientesSemPedido = clientes.filter((c) => {
+    if (!c.ultimoPedido) return false;
+    try {
+      const dataUltimoPedido = new Date(parseISO(c.ultimoPedido));
+      const diasSemPedido = Math.floor(
+        (hoje.getTime() - dataUltimoPedido.getTime()) / (1000 * 60 * 60 * 24)
+      );
+      return diasSemPedido >= 30;
+    } catch {
+      return false;
+    }
   });
 
   if (clientesSemPedido.length > 0) {
     alertas.push({
       titulo: `${clientesSemPedido.length} cliente(s) sem pedido há 30+ dias`,
-      descricao: clientesSemPedido.map((c) => c.nome).join(", "),
+      descricao: clientesSemPedido.slice(0, 3).map((c) => c.nome).join(", ") + (clientesSemPedido.length > 3 ? "..." : ""),
       acao: "Criar pedido",
       onClick: () => navigate("/pedidos"),
     });
@@ -64,12 +112,17 @@ export default function Dashboard() {
 
   // Pedidos em preparo há muito tempo
   const agora = new Date();
-  const pedidosAtrasados = dataStore.pedidos.filter((p) => {
-    if (p.status !== "Em preparo") return false;
-    const minutos = Math.floor(
-      (agora.getTime() - p.dataAtualizacao.getTime()) / (1000 * 60)
-    );
-    return minutos > 45;
+  const pedidosAtrasados = pedidos.filter((p) => {
+    if (p.status !== "EM_PREPARO") return false;
+    try {
+      const dataAtualizacao = p.dataAtualizacao ? new Date(parseISO(p.dataAtualizacao)) : new Date();
+      const minutos = Math.floor(
+        (agora.getTime() - dataAtualizacao.getTime()) / (1000 * 60)
+      );
+      return minutos > 45;
+    } catch {
+      return false;
+    }
   });
 
   if (pedidosAtrasados.length > 0) {
@@ -84,11 +137,14 @@ export default function Dashboard() {
   // Baixo movimento
   const seteDiasAtras = new Date(hoje);
   seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
-  const mediaPedidos7d = dataStore.pedidos.filter(
-    (p) => p.dataCriacao >= seteDiasAtras && p.dataCriacao < hoje
-  ).length / 7;
+  const pedidos7d = pedidos.filter((p) => {
+    const dataPedido = p.dataCriacao ? new Date(parseISO(p.dataCriacao)) : new Date();
+    dataPedido.setHours(0, 0, 0, 0);
+    return dataPedido >= seteDiasAtras && dataPedido < hoje;
+  });
+  const mediaPedidos7d = pedidos7d.length / 7;
 
-  if (pedidosHoje.length < mediaPedidos7d * 0.7) {
+  if (mediaPedidos7d > 0 && pedidosHoje.length < mediaPedidos7d * 0.7) {
     alertas.push({
       titulo: "Movimento abaixo da média",
       descricao: `Hoje: ${pedidosHoje.length} pedidos vs média 7d: ${mediaPedidos7d.toFixed(1)}`,
@@ -99,9 +155,21 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-3xl font-bold mb-2 text-foreground">Painel</h1>
-        <p className="text-muted-foreground">Visão geral do negócio</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold mb-2 text-foreground">Painel</h1>
+          <p className="text-muted-foreground">Visão geral do negócio (dados do PostgreSQL)</p>
+        </div>
+        <Button 
+          variant="outline" 
+          onClick={() => {
+            console.log("🔄 Atualizando Dashboard...");
+            carregarDados();
+          }}
+        >
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Atualizar
+        </Button>
       </div>
 
       {/* KPIs */}
@@ -115,9 +183,6 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-foreground">{pedidosHoje.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {pedidosFila} na fila
-            </p>
           </CardContent>
         </Card>
 
@@ -136,7 +201,7 @@ export default function Dashboard() {
               }).format(receitaHoje)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Pedidos pagos
+              Hoje
             </p>
           </CardContent>
         </Card>
@@ -151,7 +216,7 @@ export default function Dashboard() {
           <CardContent>
             <div className="text-2xl font-bold text-foreground">{clientesAtivos}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Total: {dataStore.clientes.length}
+              Total: {clientes.length}
             </p>
           </CardContent>
         </Card>

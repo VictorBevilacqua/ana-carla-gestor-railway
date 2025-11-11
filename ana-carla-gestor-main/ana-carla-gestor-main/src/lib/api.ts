@@ -6,7 +6,7 @@ const API_BASE_URL = 'http://localhost:8080';
 export interface ClienteDTO {
   id?: string;
   nome: string;
-  telefone?: string;
+  telefones?: string;
   email?: string;
   endereco?: string;
   cpfCnpj?: string;
@@ -46,10 +46,10 @@ export interface PedidoDTO {
 
 export interface PedidoItemDTO {
   id?: string;
-  nomeItem: string;
+  nome: string;
   quantidade: number;
-  precoUnitario: number;
-  subtotal: number;
+  precoUnit: number;
+  observacoes?: string;
 }
 
 export interface LoginRequest {
@@ -94,21 +94,69 @@ async function apiRequest<T>(
     headers['Authorization'] = `Bearer ${authToken}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
 
-  if (!response.ok) {
-    if (response.status === 401) {
-      clearAuthToken();
-      throw new Error('Sessão expirada. Faça login novamente.');
+    // Verificar se a resposta é HTML (erro do servidor)
+    const contentType = response.headers.get('content-type') || '';
+    const isJson = contentType.includes('application/json');
+    
+    if (!response.ok) {
+      if (response.status === 401) {
+        clearAuthToken();
+        throw new Error('Sessão expirada. Faça login novamente.');
+      }
+      
+      let errorMessage = `Erro ${response.status}`;
+      if (isJson) {
+        try {
+          const error = await response.json();
+          console.error('Erro do servidor:', error);
+          // Tentar extrair mensagens de validação
+          if (error.errors && Array.isArray(error.errors)) {
+            errorMessage = error.errors.join(', ');
+          } else if (error.message) {
+            errorMessage = error.message;
+          } else if (error.error) {
+            errorMessage = error.error;
+          } else if (error.detail) {
+            errorMessage = error.detail;
+          } else {
+            errorMessage = JSON.stringify(error);
+          }
+        } catch {
+          errorMessage = response.statusText || errorMessage;
+        }
+      } else {
+        // Se não for JSON, tentar ler como texto para debug
+        const text = await response.text();
+        console.error('Resposta não-JSON recebida:', text.substring(0, 500));
+        errorMessage = `Erro do servidor: ${response.status} ${response.statusText}`;
+      }
+      throw new Error(errorMessage);
     }
-    const error = await response.json().catch(() => ({ message: 'Erro desconhecido' }));
-    throw new Error(error.message || `Erro ${response.status}`);
-  }
 
-  return response.json();
+    // Se for resposta 204 No Content (DELETE bem-sucedido), retornar void
+    if (response.status === 204) {
+      return undefined as any;
+    }
+
+    if (!isJson) {
+      const text = await response.text();
+      console.error('Resposta não-JSON recebida:', text.substring(0, 200));
+      throw new Error(`Resposta inválida do servidor: esperado JSON, recebido ${contentType}`);
+    }
+
+    return response.json();
+  } catch (error: any) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error(error.message || 'Erro desconhecido');
+  }
 }
 
 // API de Autenticação
@@ -193,6 +241,12 @@ export const pedidosAPI = {
   criar: (pedido: PedidoDTO) =>
     apiRequest<PedidoDTO>('/pedidos', {
       method: 'POST',
+      body: JSON.stringify(pedido),
+    }),
+  
+  atualizar: (id: string, pedido: Partial<PedidoDTO>) =>
+    apiRequest<PedidoDTO>(`/pedidos/${id}`, {
+      method: 'PUT',
       body: JSON.stringify(pedido),
     }),
   

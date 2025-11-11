@@ -1,11 +1,11 @@
-import { useState, useMemo } from "react";
-import { dataStore, Cliente } from "@/lib/dataStore";
+import { useState, useMemo, useEffect } from "react";
+import { clientesAPI, ClienteDTO, pedidosAPI, PedidoDTO } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Phone, Plus, Mail, Calendar, DollarSign } from "lucide-react";
-import { format } from "date-fns";
+import { Search, Phone, Plus, Mail, Calendar, DollarSign, Loader2 } from "lucide-react";
+import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -13,18 +13,49 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
 export default function Clientes() {
-  const [clientes, setClientes] = useState<Cliente[]>(dataStore.clientes);
+  const [clientes, setClientes] = useState<ClienteDTO[]>([]);
+  const [pedidos, setPedidos] = useState<PedidoDTO[]>([]);
+  const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
   const [dialogNovoOpen, setDialogNovoOpen] = useState(false);
   const [dialogDetalhesOpen, setDialogDetalhesOpen] = useState(false);
-  const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
+  const [dialogEditarOpen, setDialogEditarOpen] = useState(false);
+  const [clienteSelecionado, setClienteSelecionado] = useState<ClienteDTO | null>(null);
   
   const [novoNome, setNovoNome] = useState("");
   const [novoTelefone, setNovoTelefone] = useState("");
   const [novoEmail, setNovoEmail] = useState("");
   const [novasObservacoes, setNovasObservacoes] = useState("");
+  
+  const [editarNome, setEditarNome] = useState("");
+  const [editarTelefone, setEditarTelefone] = useState("");
+  const [editarEmail, setEditarEmail] = useState("");
+  const [editarObservacoes, setEditarObservacoes] = useState("");
+  
+  const [salvando, setSalvando] = useState(false);
 
-  const criarNovoCliente = () => {
+  // Carregar clientes e pedidos da API
+  useEffect(() => {
+    carregarDados();
+  }, []);
+
+  const carregarDados = async () => {
+    try {
+      setLoading(true);
+      const [clientesData, pedidosData] = await Promise.all([
+        clientesAPI.listar(),
+        pedidosAPI.listar()
+      ]);
+      setClientes(clientesData);
+      setPedidos(pedidosData);
+    } catch (error: any) {
+      toast.error(`Erro ao carregar dados: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const criarNovoCliente = async () => {
     if (!novoNome.trim()) {
       toast.error("Digite o nome do cliente");
       return;
@@ -34,28 +65,68 @@ export default function Clientes() {
       return;
     }
 
-    const novoCliente: Cliente = {
-      id: Math.random().toString(36).substring(7),
-      nome: novoNome,
-      telefone: novoTelefone,
-      email: novoEmail,
-      observacoes: novasObservacoes,
-      dataUltimoPedido: null,
-    };
+    try {
+      setSalvando(true);
+      const novoCliente = await clientesAPI.criar({
+        nome: novoNome,
+        telefones: novoTelefone || undefined,
+        email: novoEmail || undefined,
+        observacoes: novasObservacoes || undefined,
+        ativo: true
+      });
 
-    dataStore.clientes.push(novoCliente);
-    setClientes([...dataStore.clientes]);
-    setDialogNovoOpen(false);
-    setNovoNome("");
-    setNovoTelefone("");
-    setNovoEmail("");
-    setNovasObservacoes("");
-    toast.success("Cliente criado com sucesso!");
+      setClientes([...clientes, novoCliente]);
+      setDialogNovoOpen(false);
+      setNovoNome("");
+      setNovoTelefone("");
+      setNovoEmail("");
+      setNovasObservacoes("");
+      toast.success("Cliente criado com sucesso!");
+    } catch (error: any) {
+      toast.error(`Erro ao criar cliente: ${error.message}`);
+    } finally {
+      setSalvando(false);
+    }
   };
 
-  const abrirDetalhes = (cliente: Cliente) => {
+  const abrirDetalhes = (cliente: ClienteDTO) => {
     setClienteSelecionado(cliente);
     setDialogDetalhesOpen(true);
+  };
+
+  const abrirEditar = (cliente: ClienteDTO) => {
+    setClienteSelecionado(cliente);
+    setEditarNome(cliente.nome);
+    setEditarTelefone(cliente.telefones || "");
+    setEditarEmail(cliente.email || "");
+    setEditarObservacoes(cliente.observacoes || "");
+    setDialogEditarOpen(true);
+  };
+
+  const salvarEdicao = async () => {
+    if (!editarNome.trim()) {
+      toast.error("Nome é obrigatório");
+      return;
+    }
+    if (!clienteSelecionado) return;
+
+    try {
+      setSalvando(true);
+      const clienteAtualizado = await clientesAPI.atualizar(clienteSelecionado.id!, {
+        nome: editarNome,
+        telefones: editarTelefone || undefined,
+        email: editarEmail || undefined,
+        observacoes: editarObservacoes || undefined,
+      });
+
+      setClientes(clientes.map(c => c.id === clienteAtualizado.id ? clienteAtualizado : c));
+      setDialogEditarOpen(false);
+      toast.success("Cliente atualizado!");
+    } catch (error: any) {
+      toast.error(`Erro ao atualizar cliente: ${error.message}`);
+    } finally {
+      setSalvando(false);
+    }
   };
 
   const clientesFiltrados = useMemo(() => {
@@ -64,7 +135,7 @@ export default function Clientes() {
     return clientes.filter(
       (c) =>
         c.nome.toLowerCase().includes(termo) ||
-        c.telefone.toLowerCase().includes(termo)
+        (c.telefones && c.telefones.toLowerCase().includes(termo))
     );
   }, [clientes, busca]);
 
@@ -73,17 +144,40 @@ export default function Clientes() {
     const trintaDiasAtras = new Date(hoje);
     trintaDiasAtras.setDate(trintaDiasAtras.getDate() - 30);
 
-    const total = dataStore.pedidos
+    const total = pedidos
       .filter(
-        (p) =>
-          p.clienteId === clienteId &&
-          p.dataCriacao >= trintaDiasAtras &&
-          p.pago
+        (p) => {
+          if (p.clienteId !== clienteId) return false;
+          if (!p.createdAt) return false;
+          const dataPedido = parseISO(p.createdAt);
+          return dataPedido >= trintaDiasAtras && p.dataEntrega; // Pedidos que foram entregues
+        }
       )
-      .reduce((acc, p) => acc + p.total, 0);
+      .reduce((acc, p) => acc + p.valorTotal, 0);
 
     return total;
   };
+
+  const getUltimoPedido = (clienteId: string): Date | null => {
+    const pedidosCliente = pedidos.filter(p => p.clienteId === clienteId);
+    if (pedidosCliente.length === 0) return null;
+    
+    const maisRecente = pedidosCliente.reduce((prev, current) => {
+      const prevDate = prev.createdAt ? parseISO(prev.createdAt) : new Date(0);
+      const currentDate = current.createdAt ? parseISO(current.createdAt) : new Date(0);
+      return currentDate > prevDate ? current : prev;
+    });
+
+    return maisRecente.createdAt ? parseISO(maisRecente.createdAt) : null;
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -150,11 +244,11 @@ export default function Clientes() {
               </div>
             </div>
             <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setDialogNovoOpen(false)}>
+              <Button variant="outline" onClick={() => setDialogNovoOpen(false)} disabled={salvando}>
                 Cancelar
               </Button>
-              <Button onClick={criarNovoCliente} className="gradient-primary text-white">
-                Cadastrar
+              <Button onClick={criarNovoCliente} className="gradient-primary text-white" disabled={salvando}>
+                {salvando ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Salvando...</> : "Cadastrar"}
               </Button>
             </div>
           </DialogContent>
@@ -173,8 +267,9 @@ export default function Clientes() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {clientesFiltrados.map((cliente) => {
-          const totalGasto = getTotalGasto30d(cliente.id);
-          const telefoneLink = cliente.telefone.replace(/\D/g, "");
+          const totalGasto = getTotalGasto30d(cliente.id!);
+          const ultimoPedido = getUltimoPedido(cliente.id!);
+          const telefoneLink = cliente.telefones?.replace(/\D/g, "") || "";
 
           return (
             <Card key={cliente.id} className="shadow-custom-md border-0">
@@ -182,17 +277,19 @@ export default function Clientes() {
                 <CardTitle className="text-lg">{cliente.nome}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex items-center gap-2 text-sm">
-                  <Phone className="h-4 w-4 text-muted-foreground" />
-                  <a
-                    href={`https://wa.me/55${telefoneLink}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline"
-                  >
-                    {cliente.telefone}
-                  </a>
-                </div>
+                {cliente.telefones && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Phone className="h-4 w-4 text-muted-foreground" />
+                    <a
+                      href={`https://wa.me/55${telefoneLink}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      {cliente.telefones}
+                    </a>
+                  </div>
+                )}
 
                 {cliente.email && (
                   <div className="text-sm text-muted-foreground">
@@ -204,8 +301,8 @@ export default function Clientes() {
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground">Último pedido</p>
                     <p className="text-sm font-medium">
-                      {cliente.dataUltimoPedido
-                        ? format(cliente.dataUltimoPedido, "dd/MM/yyyy", { locale: ptBR })
+                      {ultimoPedido
+                        ? format(ultimoPedido, "dd/MM/yyyy", { locale: ptBR })
                         : "Nunca"}
                     </p>
                   </div>
@@ -253,20 +350,22 @@ export default function Clientes() {
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Phone className="h-4 w-4" />
-                      <span>Telefone</span>
+                  {clienteSelecionado.telefones && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Phone className="h-4 w-4" />
+                        <span>Telefone</span>
+                      </div>
+                      <a
+                        href={`https://wa.me/55${clienteSelecionado.telefones.replace(/\D/g, "")}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline font-medium"
+                      >
+                        {clienteSelecionado.telefones}
+                      </a>
                     </div>
-                    <a
-                      href={`https://wa.me/55${clienteSelecionado.telefone.replace(/\D/g, "")}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline font-medium"
-                    >
-                      {clienteSelecionado.telefone}
-                    </a>
-                  </div>
+                  )}
 
                   {clienteSelecionado.email && (
                     <div className="space-y-2">
@@ -286,9 +385,10 @@ export default function Clientes() {
                       <span>Último Pedido</span>
                     </div>
                     <p className="font-medium">
-                      {clienteSelecionado.dataUltimoPedido
-                        ? format(clienteSelecionado.dataUltimoPedido, "dd/MM/yyyy", { locale: ptBR })
-                        : "Nunca"}
+                      {(() => {
+                        const ultimo = getUltimoPedido(clienteSelecionado.id!);
+                        return ultimo ? format(ultimo, "dd/MM/yyyy", { locale: ptBR }) : "Nunca";
+                      })()}
                     </p>
                   </div>
 
@@ -301,7 +401,7 @@ export default function Clientes() {
                       {new Intl.NumberFormat("pt-BR", {
                         style: "currency",
                         currency: "BRL",
-                      }).format(getTotalGasto30d(clienteSelecionado.id))}
+                      }).format(getTotalGasto30d(clienteSelecionado.id!))}
                     </p>
                   </div>
                 </div>
@@ -318,14 +418,14 @@ export default function Clientes() {
                 <div className="space-y-2 pt-4 border-t">
                   <div className="text-sm font-medium">Histórico de Pedidos</div>
                   <div className="space-y-2">
-                    {dataStore.pedidos
+                    {pedidos
                       .filter((p) => p.clienteId === clienteSelecionado.id)
                       .slice(0, 5)
                       .map((pedido) => (
                         <div key={pedido.id} className="flex items-center justify-between p-2 bg-muted/20 rounded">
                           <div>
                             <p className="text-sm font-medium">
-                              {format(pedido.dataCriacao, "dd/MM/yyyy", { locale: ptBR })}
+                              {pedido.createdAt && format(parseISO(pedido.createdAt), "dd/MM/yyyy", { locale: ptBR })}
                             </p>
                             <p className="text-xs text-muted-foreground">{pedido.status}</p>
                           </div>
@@ -333,11 +433,11 @@ export default function Clientes() {
                             {new Intl.NumberFormat("pt-BR", {
                               style: "currency",
                               currency: "BRL",
-                            }).format(pedido.total)}
+                            }).format(pedido.valorTotal)}
                           </p>
                         </div>
                       ))}
-                    {dataStore.pedidos.filter((p) => p.clienteId === clienteSelecionado.id).length === 0 && (
+                    {pedidos.filter((p) => p.clienteId === clienteSelecionado.id).length === 0 && (
                       <p className="text-sm text-muted-foreground text-center py-4">
                         Nenhum pedido encontrado
                       </p>
@@ -349,8 +449,78 @@ export default function Clientes() {
                 <Button variant="outline" onClick={() => setDialogDetalhesOpen(false)}>
                   Fechar
                 </Button>
-                <Button className="gradient-primary text-white">
+                <Button 
+                  className="gradient-primary text-white"
+                  onClick={() => {
+                    setDialogDetalhesOpen(false);
+                    abrirEditar(clienteSelecionado);
+                  }}
+                >
                   Editar Cliente
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Edição */}
+      <Dialog open={dialogEditarOpen} onOpenChange={setDialogEditarOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          {clienteSelecionado && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Editar Cliente</DialogTitle>
+                <DialogDescription>
+                  Atualize as informações do cliente
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="editar-nome">Nome *</Label>
+                  <Input
+                    id="editar-nome"
+                    value={editarNome}
+                    onChange={(e) => setEditarNome(e.target.value)}
+                    placeholder="Nome completo"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="editar-telefone">Telefone</Label>
+                  <Input
+                    id="editar-telefone"
+                    value={editarTelefone}
+                    onChange={(e) => setEditarTelefone(e.target.value)}
+                    placeholder="(00) 00000-0000"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="editar-email">E-mail</Label>
+                  <Input
+                    id="editar-email"
+                    type="email"
+                    value={editarEmail}
+                    onChange={(e) => setEditarEmail(e.target.value)}
+                    placeholder="cliente@email.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="editar-observacoes">Observações</Label>
+                  <Textarea
+                    id="editar-observacoes"
+                    value={editarObservacoes}
+                    onChange={(e) => setEditarObservacoes(e.target.value)}
+                    placeholder="Informações adicionais..."
+                    rows={3}
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3">
+                <Button variant="outline" onClick={() => setDialogEditarOpen(false)} disabled={salvando}>
+                  Cancelar
+                </Button>
+                <Button onClick={salvarEdicao} disabled={salvando} className="gradient-primary text-white">
+                  {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar Alterações"}
                 </Button>
               </div>
             </>

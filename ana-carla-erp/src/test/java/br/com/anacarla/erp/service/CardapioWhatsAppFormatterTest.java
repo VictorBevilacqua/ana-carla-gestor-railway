@@ -25,7 +25,7 @@ class CardapioWhatsAppFormatterTest extends BaseIntegrationTest {
     void setUp() {
         // Criar alguns itens do cardápio
         cardapioService.criar(CardapioItemDTO.builder()
-                .categoria(CategoriaCardapio.BOVINO)
+                .categoria(CategoriaCardapio.PROTEINA)
                 .nome("Patinho Moído Acebolado")
                 .preco(BigDecimal.valueOf(18.00))
                 .descricao("Alecrim e pimenta-do-reino")
@@ -34,12 +34,12 @@ class CardapioWhatsAppFormatterTest extends BaseIntegrationTest {
                 .build());
 
         cardapioService.criar(CardapioItemDTO.builder()
-                .categoria(CategoriaCardapio.FRANGO)
+                .categoria(CategoriaCardapio.PROTEINA)
                 .nome("Filé de Frango ao Forno")
                 .preco(BigDecimal.valueOf(16.00))
                 .descricao("Tomilho e limão siciliano")
                 .ativo(true)
-                .ordem(1)
+                .ordem(2)
                 .build());
 
         cardapioService.criar(CardapioItemDTO.builder()
@@ -59,11 +59,10 @@ class CardapioWhatsAppFormatterTest extends BaseIntegrationTest {
         // Then
         assertThat(texto).isNotBlank();
         assertThat(texto).contains("🍱 *Cardápio da Semana*");
-        assertThat(texto).contains("*Bovino*");
+        assertThat(texto).contains("*Proteínas*");
         assertThat(texto).contains("Patinho Moído Acebolado");
         assertThat(texto).contains("R$");
         assertThat(texto).contains("18,00");
-        assertThat(texto).contains("*Frango*");
         assertThat(texto).contains("Filé de Frango ao Forno");
         assertThat(texto).contains("_Alecrim e pimenta-do-reino_");
         assertThat(texto).contains("📱 Faça seu pedido pelo WhatsApp!");

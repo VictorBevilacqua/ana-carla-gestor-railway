@@ -1,45 +1,49 @@
-# Node
-node_modules/
-npm-debug.log
-yarn-error.log
-
 # Java / Maven
-target/
-.mvn/
+ana-carla-erp/target/
+ana-carla-erp/.mvn/wrapper/maven-wrapper.jar
 *.class
 *.jar
-!.mvn/wrapper/maven-wrapper.jar
+*.war
+*.ear
+*.log
 
-# IDEs
+# Node.js / Frontend
+ana-carla-gestor-main/ana-carla-gestor-main/node_modules/
+ana-carla-gestor-main/ana-carla-gestor-main/dist/
+ana-carla-gestor-main/ana-carla-gestor-main/.vite/
+*.tsbuildinfo
+
+# IDE
 .idea/
 .vscode/
 *.iml
 *.swp
 *.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Build artifacts
-dist/
-build/
+# Temporários
+*.tmp
+*.temp
+*.bak
+
+# Logs
 *.log
 
-# Instaladores (arquivos binários grandes)
-*.exe
-*.msi
-*.zip
+# Scripts PowerShell temporários (manter apenas os essenciais)
+AGUARDAR_DOCKER.ps1
+CONFIGURAR_POSTGRESQL.md
+INICIAR_POSTGRES_DOCKER.ps1
+INICIAR_TUDO.ps1
+INICIAR_TUDO_POSTGRES.ps1
+INSTALAR_NODEJS.ps1
+MELHORIAS_PEDIDOS_IMPLEMENTADAS.md
+SOLUCAO_LOGIN.md
+TESTAR_LOGIN.ps1
 
-# Screenshots
-*.png
-*.jpg
-*.jpeg
-*.gif
-
-# H2 Database
-*.db
-*.mv.db
-*.trace.db
-
-
+# Environment
+.env
+.env.local

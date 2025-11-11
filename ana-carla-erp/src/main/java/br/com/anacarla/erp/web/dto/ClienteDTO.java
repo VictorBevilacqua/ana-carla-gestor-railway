@@ -55,6 +55,8 @@ public class ClienteDTO {
     private BigDecimal ltv;
     private Map<String, Object> rfm;
     
+    private String observacoes;
+    
     private Instant createdAt;
     private Instant updatedAt;
 }

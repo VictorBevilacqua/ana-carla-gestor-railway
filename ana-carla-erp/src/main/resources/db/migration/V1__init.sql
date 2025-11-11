@@ -43,7 +43,7 @@ CREATE TABLE clientes (
 CREATE INDEX idx_cliente_email ON clientes(email);
 CREATE INDEX idx_cliente_cpf_cnpj ON clientes(cpf_cnpj);
 CREATE INDEX idx_cliente_recencia ON clientes(recencia_dias);
--- CREATE INDEX idx_cliente_preferencias_canal ON clientes((preferencias_contato->>'canal')); -- PostgreSQL only
+CREATE INDEX idx_cliente_preferencias_canal ON clientes((preferencias_contato->>'canal')); -- PostgreSQL JSONB indexing
 
 -- Cardápio
 CREATE TABLE cardapio_item (

@@ -25,7 +25,7 @@ public class CardapioService {
     private final CardapioMapper cardapioMapper;
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "cardapio", key = "#ativo")
+    @Cacheable(value = "cardapio", key = "#ativo != null ? #ativo : 'all'")
     public List<CardapioItemDTO> listar(Boolean ativo) {
         log.debug("Listando itens do cardápio (ativo: {})", ativo);
         List<CardapioItem> itens;

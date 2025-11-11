@@ -20,7 +20,7 @@ public interface PedidoRepository extends JpaRepository<Pedido, UUID> {
 
     Page<Pedido> findByClienteIdOrderByDataCriacaoDesc(UUID clienteId, Pageable pageable);
 
-    @Query("SELECT p FROM Pedido p WHERE p.clienteId = :clienteId AND p.status = 'ENTREGUE' ORDER BY p.dataEntrega DESC")
+    @Query("SELECT p FROM Pedido p WHERE p.clienteId = :clienteId AND p.dataEntrega IS NOT NULL ORDER BY p.dataEntrega DESC")
     List<Pedido> findPedidosEntreguesDoCliente(@Param("clienteId") UUID clienteId);
 
     @Query("SELECT p FROM Pedido p WHERE p.clienteId = :clienteId AND p.dataEntrega BETWEEN :inicio AND :fim")

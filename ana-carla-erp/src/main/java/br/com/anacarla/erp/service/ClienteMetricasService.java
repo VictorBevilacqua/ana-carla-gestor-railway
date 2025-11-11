@@ -24,6 +24,23 @@ public class ClienteMetricasService {
     private final PedidoRepository pedidoRepository;
 
     @Transactional
+    public void atualizarUltimoPedido(UUID clienteId, Instant dataPedido) {
+        log.debug("Atualizando último pedido do cliente: {}", clienteId);
+        
+        Cliente cliente = clienteRepository.findById(clienteId)
+                .orElseThrow(() -> new IllegalArgumentException("Cliente não encontrado"));
+        
+        // Atualizar se é o pedido mais recente
+        if (cliente.getUltimaCompra() == null || dataPedido.isAfter(cliente.getUltimaCompra())) {
+            cliente.setUltimaCompra(dataPedido);
+            long dias = ChronoUnit.DAYS.between(dataPedido, Instant.now());
+            cliente.setRecenciaDias((int) dias);
+            clienteRepository.save(cliente);
+            log.info("Última data de pedido atualizada para cliente {}: {}", clienteId, dataPedido);
+        }
+    }
+
+    @Transactional
     public void recalcularMetricasCliente(UUID clienteId) {
         log.debug("Recalculando métricas do cliente: {}", clienteId);
         

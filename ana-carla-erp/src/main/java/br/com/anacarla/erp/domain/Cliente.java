@@ -83,5 +83,8 @@ public class Cliente extends BaseEntity {
     @Type(JsonBinaryType.class)
     @Column(name = "rfm", columnDefinition = "jsonb")
     private Map<String, Object> rfm;
+
+    @Column(columnDefinition = "TEXT")
+    private String observacoes;
 }
 

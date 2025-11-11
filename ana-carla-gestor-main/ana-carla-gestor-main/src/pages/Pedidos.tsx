@@ -1,39 +1,102 @@
-import { useState } from "react";
-import { dataStore, Pedido, StatusPedido, ItemPedido } from "@/lib/dataStore";
+import { useState, useEffect } from "react";
+import { pedidosAPI, PedidoDTO, PedidoItemDTO, clientesAPI, ClienteDTO, cardapioAPI, CardapioItemDTO } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Package, Clock, Check, Truck, Plus, X, Minus, Eye, ShoppingCart, User, CreditCard, FileText } from "lucide-react";
+import { Package, Clock, Check, Truck, Plus, X, Minus, Eye, ShoppingCart, User, CreditCard, FileText, Edit, Trash2, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
-const statusColumns: StatusPedido[] = ["Novo", "Em preparo", "Pronto", "Entregue"];
+type StatusPedido = "RECEBIDO" | "PREPARANDO" | "PRONTO" | "ENTREGUE";
+
+const statusColumns: StatusPedido[] = ["RECEBIDO", "PREPARANDO", "PRONTO", "ENTREGUE"];
+const statusLabels: Record<StatusPedido, string> = {
+  RECEBIDO: "Novo",
+  PREPARANDO: "Em preparo",
+  PRONTO: "Pronto",
+  ENTREGUE: "Entregue",
+};
 
 const statusConfig = {
-  Novo: { color: "bg-info/10 text-info border-info/20", icon: Package },
-  "Em preparo": { color: "bg-warning/10 text-warning border-warning/20", icon: Clock },
-  Pronto: { color: "bg-success/10 text-success border-success/20", icon: Check },
-  Entregue: { color: "bg-muted text-muted-foreground border-muted", icon: Truck },
+  RECEBIDO: { color: "bg-info/10 text-info border-info/20", icon: Package },
+  PREPARANDO: { color: "bg-warning/10 text-warning border-warning/20", icon: Clock },
+  PRONTO: { color: "bg-success/10 text-success border-success/20", icon: Check },
+  ENTREGUE: { color: "bg-muted text-muted-foreground border-muted", icon: Truck },
 };
 
 export default function Pedidos() {
-  const [pedidos, setPedidos] = useState<Pedido[]>(dataStore.pedidos);
+  const [pedidos, setPedidos] = useState<PedidoDTO[]>([]);
+  const [clientes, setClientes] = useState<ClienteDTO[]>([]);
+  const [cardapio, setCardapio] = useState<CardapioItemDTO[]>([]);
+  const [loading, setLoading] = useState(true);
+  
   const [dialogNovoOpen, setDialogNovoOpen] = useState(false);
+  const [dialogEditarOpen, setDialogEditarOpen] = useState(false);
   const [dialogDetalhesOpen, setDialogDetalhesOpen] = useState(false);
-  const [pedidoSelecionado, setPedidoSelecionado] = useState<Pedido | null>(null);
+  const [alertExcluirOpen, setAlertExcluirOpen] = useState(false);
+  const [pedidoSelecionado, setPedidoSelecionado] = useState<PedidoDTO | null>(null);
   
   const [novoClienteId, setNovoClienteId] = useState("");
-  const [novaFormaPagamento, setNovaFormaPagamento] = useState("Dinheiro");
+  const [novoCanal, setNovoCanal] = useState("PRESENCIAL");
   const [novasObservacoes, setNovasObservacoes] = useState("");
   const [itensSelecionados, setItensSelecionados] = useState<Map<string, number>>(new Map());
+  const [salvando, setSalvando] = useState(false);
+
+  const [editarClienteId, setEditarClienteId] = useState("");
+  const [editarCanal, setEditarCanal] = useState("PRESENCIAL");
+  const [editarObservacoes, setEditarObservacoes] = useState("");
+  const [editarItensSelecionados, setEditarItensSelecionados] = useState<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    carregarDados();
+  }, []);
+
+  const carregarDados = async () => {
+    try {
+      setLoading(true);
+      console.log("=== CARREGANDO DADOS ===");
+      const [pedidosData, clientesData, cardapioData] = await Promise.all([
+        pedidosAPI.listar(),
+        clientesAPI.listar(),
+        cardapioAPI.listar(), // carregar TODOS os itens (incluindo inativos) para poder editar pedidos antigos
+      ]);
+      console.log(`Pedidos carregados: ${pedidosData.length}`);
+      console.log(`Clientes carregados: ${clientesData.length}`);
+      console.log(`Cardápio carregado: ${cardapioData.length} itens`);
+      console.log(`Itens ativos: ${cardapioData.filter(i => i.ativo).length}`);
+      console.log(`Itens inativos: ${cardapioData.filter(i => !i.ativo).length}`);
+      
+      // Filtrar pedidos cancelados (finalizados) para não mostrá-los no Kanban
+      const pedidosAtivos = pedidosData.filter(p => p.status !== "CANCELADO");
+      console.log(`Pedidos ativos (sem cancelados): ${pedidosAtivos.length}`);
+      
+      setPedidos(pedidosAtivos);
+      setClientes(clientesData);
+      setCardapio(cardapioData);
+    } catch (error: any) {
+      console.error("Erro ao carregar dados:", error);
+      toast.error(`Erro ao carregar dados: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const adicionarItem = (itemId: string) => {
     const novoMapa = new Map(itensSelecionados);
@@ -53,10 +116,28 @@ export default function Pedidos() {
     setItensSelecionados(novoMapa);
   };
 
+  const adicionarItemEditar = (itemId: string) => {
+    const novoMapa = new Map(editarItensSelecionados);
+    const qtdAtual = novoMapa.get(itemId) || 0;
+    novoMapa.set(itemId, qtdAtual + 1);
+    setEditarItensSelecionados(novoMapa);
+  };
+
+  const removerItemEditar = (itemId: string) => {
+    const novoMapa = new Map(editarItensSelecionados);
+    const qtdAtual = novoMapa.get(itemId) || 0;
+    if (qtdAtual > 1) {
+      novoMapa.set(itemId, qtdAtual - 1);
+    } else {
+      novoMapa.delete(itemId);
+    }
+    setEditarItensSelecionados(novoMapa);
+  };
+
   const calcularTotal = () => {
     let total = 0;
     itensSelecionados.forEach((qtd, itemId) => {
-      const item = dataStore.cardapio.find((i) => i.id === itemId);
+      const item = cardapio.find((i) => i.id === itemId);
       if (item) {
         total += item.preco * qtd;
       }
@@ -64,7 +145,18 @@ export default function Pedidos() {
     return total;
   };
 
-  const criarNovoPedido = () => {
+  const calcularTotalEditar = () => {
+    let total = 0;
+    editarItensSelecionados.forEach((qtd, itemId) => {
+      const item = cardapio.find((i) => i.id === itemId);
+      if (item) {
+        total += item.preco * qtd;
+      }
+    });
+    return total;
+  };
+
+  const criarNovoPedido = async () => {
     if (!novoClienteId) {
       toast.error("Selecione um cliente");
       return;
@@ -75,99 +167,336 @@ export default function Pedidos() {
       return;
     }
 
-    const itens: ItemPedido[] = [];
-    itensSelecionados.forEach((qtd, itemId) => {
-      const itemCardapio = dataStore.cardapio.find((i) => i.id === itemId);
-      if (itemCardapio) {
-        itens.push({
-          itemCardapioId: itemId,
-          nome: itemCardapio.nome,
-          qtd: qtd,
-          precoUnitario: itemCardapio.preco,
-          subtotal: itemCardapio.preco * qtd,
-        });
-      }
-    });
+    try {
+      setSalvando(true);
+      const itens: PedidoItemDTO[] = [];
+      itensSelecionados.forEach((qtd, itemId) => {
+        const itemCardapio = cardapio.find((i) => i.id === itemId);
+        if (itemCardapio) {
+          itens.push({
+            nome: itemCardapio.nome,
+            quantidade: qtd,
+            precoUnit: itemCardapio.preco,
+          });
+        }
+      });
 
-    const total = calcularTotal();
+      const total = calcularTotal();
 
-    const novoPedido: Pedido = {
-      id: Math.random().toString(36).substring(7),
-      clienteId: novoClienteId,
-      status: "Novo",
-      itens: itens,
-      total: total,
-      pago: false,
-      formaPagamento: novaFormaPagamento,
-      dataCriacao: new Date(),
-      dataAtualizacao: new Date(),
-      observacoes: novasObservacoes,
-    };
+      const novoPedido = await pedidosAPI.criar({
+        clienteId: novoClienteId,
+        valorTotal: total,
+        status: "RECEBIDO",
+        canal: novoCanal,
+        observacoes: novasObservacoes || undefined,
+        itens: itens,
+      });
 
-    dataStore.pedidos.push(novoPedido);
-    setPedidos([...dataStore.pedidos]);
-    setDialogNovoOpen(false);
-    setNovoClienteId("");
-    setNovasObservacoes("");
-    setItensSelecionados(new Map());
-    toast.success("Pedido criado com sucesso!");
+      setPedidos([...pedidos, novoPedido]);
+      setDialogNovoOpen(false);
+      setNovoClienteId("");
+      setNovoCanal("PRESENCIAL");
+      setNovasObservacoes("");
+      setItensSelecionados(new Map());
+      toast.success("Pedido criado e salvo no banco!");
+    } catch (error: any) {
+      toast.error(`Erro ao criar pedido: ${error.message}`);
+    } finally {
+      setSalvando(false);
+    }
   };
 
-  const abrirDetalhes = (pedido: Pedido) => {
+  const onDragEnd = async (result: DropResult) => {
+    const { destination, source, draggableId } = result;
+
+    if (!destination) return;
+    if (destination.droppableId === source.droppableId && destination.index === source.index) return;
+
+    const novoStatus = destination.droppableId as StatusPedido;
+    const pedidoId = draggableId;
+
+    try {
+      await pedidosAPI.atualizarStatus(pedidoId, novoStatus);
+      setPedidos(pedidos.map(p => p.id === pedidoId ? { ...p, status: novoStatus } : p));
+      toast.success(`Pedido movido para: ${statusLabels[novoStatus]}`);
+    } catch (error: any) {
+      toast.error(`Erro ao atualizar status: ${error.message}`);
+    }
+  };
+
+  const abrirDetalhes = (pedido: PedidoDTO) => {
     setPedidoSelecionado(pedido);
     setDialogDetalhesOpen(true);
   };
 
-  const handleDragEnd = (result: DropResult) => {
-    if (!result.destination) return;
-
-    const sourceStatus = result.source.droppableId as StatusPedido;
-    const destStatus = result.destination.droppableId as StatusPedido;
+  const abrirEditar = (pedido: PedidoDTO) => {
+    setPedidoSelecionado(pedido);
+    setEditarClienteId(pedido.clienteId);
+    setEditarCanal(pedido.canal);
+    setEditarObservacoes(pedido.observacoes || "");
     
-    if (sourceStatus === destStatus) return;
-
-    const pedidoId = result.draggableId;
-    
-    dataStore.updatePedido(pedidoId, { status: destStatus });
-    setPedidos([...dataStore.pedidos]);
-    
-    toast.success(`Pedido movido para ${destStatus}`);
+    const novoMapa = new Map<string, number>();
+    pedido.itens?.forEach((item) => {
+      const cardapioItem = cardapio.find(c => c.nome === item.nome);
+      if (cardapioItem) {
+        novoMapa.set(cardapioItem.id!, item.quantidade);
+      }
+    });
+    setEditarItensSelecionados(novoMapa);
+    setDialogEditarOpen(true);
   };
 
-  const getPedidosByStatus = (status: StatusPedido) => {
-    return pedidos.filter((p) => p.status === status);
+  const salvarEdicao = async () => {
+    if (!pedidoSelecionado || !pedidoSelecionado.id) return;
+    if (!editarClienteId) {
+      toast.error("Selecione um cliente");
+      return;
+    }
+    if (editarItensSelecionados.size === 0) {
+      toast.error("Adicione pelo menos um item ao pedido");
+      return;
+    }
+
+    try {
+      setSalvando(true);
+      const itens: PedidoItemDTO[] = [];
+      editarItensSelecionados.forEach((qtd, itemId) => {
+        const itemCardapio = cardapio.find((i) => i.id === itemId);
+        if (itemCardapio) {
+          itens.push({
+            nome: itemCardapio.nome,
+            quantidade: qtd,
+            precoUnit: itemCardapio.preco,
+          });
+        }
+      });
+
+      const total = calcularTotalEditar();
+
+      const pedidoAtualizado = await pedidosAPI.atualizar(pedidoSelecionado.id, {
+        clienteId: editarClienteId,
+        valorTotal: total,
+        status: pedidoSelecionado.status,
+        canal: editarCanal,
+        observacoes: editarObservacoes || undefined,
+        itens: itens,
+      });
+
+      setPedidos(pedidos.map(p => p.id === pedidoSelecionado.id ? pedidoAtualizado : p));
+      setDialogEditarOpen(false);
+      toast.success("Pedido atualizado no banco!");
+    } catch (error: any) {
+      toast.error(`Erro ao atualizar pedido: ${error.message}`);
+    } finally {
+      setSalvando(false);
+    }
   };
 
-  const getClienteNome = (clienteId: string) => {
-    return dataStore.clientes.find((c) => c.id === clienteId)?.nome || "Cliente desconhecido";
+  const confirmarFinalizar = (pedido: PedidoDTO) => {
+    setPedidoSelecionado(pedido);
+    setAlertExcluirOpen(true);
   };
 
-  const getTotalItens = (pedido: Pedido) => {
-    return pedido.itens.reduce((acc, item) => acc + item.qtd, 0);
+  const finalizarPedido = async () => {
+    if (!pedidoSelecionado || !pedidoSelecionado.id) {
+      toast.error("Nenhum pedido selecionado");
+      return;
+    }
+
+    const idParaFinalizar = pedidoSelecionado.id;
+    console.log("=== FINALIZANDO PEDIDO ===");
+    console.log("ID:", idParaFinalizar);
+
+    try {
+      // Mudar status para CANCELADO (finalizado/arquivado)
+      await pedidosAPI.atualizarStatus(idParaFinalizar, "CANCELADO");
+      console.log("✅ Pedido finalizado (status → CANCELADO)");
+      
+      // Recarregar pedidos (pedidos cancelados serão filtrados)
+      const pedidosAtualizados = await pedidosAPI.listar();
+      // Filtrar pedidos cancelados para não mostrá-los no Kanban
+      setPedidos(pedidosAtualizados.filter(p => p.status !== "CANCELADO"));
+      
+      setAlertExcluirOpen(false);
+      setPedidoSelecionado(null);
+      toast.success("Pedido finalizado! Foi movido para o histórico.");
+    } catch (error: any) {
+      console.error("❌ ERRO ao finalizar:", error);
+      toast.error(`Erro ao finalizar pedido: ${error.message || "Erro desconhecido"}`);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const getPedidosPorStatus = (status: StatusPedido) => {
+    return pedidos.filter(p => p.status === status);
   };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-3xl font-bold mb-2 text-foreground">Pedidos</h1>
-        <p className="text-muted-foreground">Kanban de acompanhamento</p>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold mb-2 text-foreground">Pedidos</h1>
+          <p className="text-muted-foreground">Gerencie seus pedidos em Kanban</p>
+        </div>
+        <div className="flex gap-3">
+          <Button 
+            variant="outline" 
+            onClick={() => {
+              console.log("🔄 Recarregando dados...");
+              carregarDados();
+            }}
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Atualizar
+          </Button>
+        <Dialog open={dialogNovoOpen} onOpenChange={setDialogNovoOpen}>
+            <DialogTrigger asChild>
+              <Button className="gradient-primary text-white shadow-custom-md">
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Pedido
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>Criar Novo Pedido</DialogTitle>
+              <DialogDescription>
+                Adicione um novo pedido ao sistema (será salvo no PostgreSQL)
+              </DialogDescription>
+            </DialogHeader>
+            <ScrollArea className="max-h-[500px] pr-4">
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Cliente *</Label>
+                  <Select value={novoClienteId} onValueChange={setNovoClienteId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um cliente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clientes.map((cliente) => (
+                        <SelectItem key={cliente.id} value={cliente.id!}>
+                          {cliente.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Itens do Pedido *</Label>
+                  <div className="space-y-2 max-h-64 overflow-y-auto border rounded-md p-2">
+                    {cardapio.filter(item => item.ativo).map((item) => (
+                      <div key={item.id} className="flex items-center justify-between p-2 border rounded-md">
+                        <div className="flex-1">
+                          <p className="font-medium">{item.nome}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {new Intl.NumberFormat("pt-BR", {
+                              style: "currency",
+                              currency: "BRL",
+                            }).format(item.preco)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => removerItem(item.id!)}
+                            disabled={!itensSelecionados.has(item.id!)}
+                          >
+                            <Minus className="h-4 w-4" />
+                          </Button>
+                          <span className="w-8 text-center">
+                            {itensSelecionados.get(item.id!) || 0}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => adicionarItem(item.id!)}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Canal do Pedido</Label>
+                  <Select value={novoCanal} onValueChange={setNovoCanal}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PRESENCIAL">Presencial</SelectItem>
+                      <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
+                      <SelectItem value="TELEFONE">Telefone</SelectItem>
+                      <SelectItem value="WEB">Web</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Observações</Label>
+                  <Textarea
+                    placeholder="Observações do pedido..."
+                    value={novasObservacoes}
+                    onChange={(e) => setNovasObservacoes(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                  <span className="font-medium">Total:</span>
+                  <span className="text-2xl font-bold text-primary">
+                    {new Intl.NumberFormat("pt-BR", {
+                      style: "currency",
+                      currency: "BRL",
+                    }).format(calcularTotal())}
+                  </span>
+                </div>
+              </div>
+            </ScrollArea>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setDialogNovoOpen(false)} disabled={salvando}>
+                Cancelar
+              </Button>
+              <Button onClick={criarNovoPedido} className="gradient-primary text-white" disabled={salvando}>
+                {salvando ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Salvando...</> : "Criar Pedido"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+        </div>
       </div>
 
-      <DragDropContext onDragEnd={handleDragEnd}>
+      <DragDropContext onDragEnd={onDragEnd}>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {statusColumns.map((status) => {
-            const pedidosDoStatus = getPedidosByStatus(status);
             const config = statusConfig[status];
             const Icon = config.icon;
+            const pedidosStatus = getPedidosPorStatus(status);
 
             return (
-              <div key={status} className="space-y-3">
-                <div className="flex items-center gap-2 px-2">
-                  <Icon className="h-5 w-5 text-primary" />
-                  <h3 className="font-semibold text-foreground">{status}</h3>
-                  <Badge variant="secondary" className="ml-auto">
-                    {pedidosDoStatus.length}
-                  </Badge>
+              <div key={status} className="flex flex-col">
+                <div className={`p-4 rounded-t-lg border-b-2 ${config.color}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Icon className="h-5 w-5" />
+                      <h3 className="font-semibold">{statusLabels[status]}</h3>
+                    </div>
+                    <Badge variant="secondary">{pedidosStatus.length}</Badge>
+                  </div>
                 </div>
 
                 <Droppable droppableId={status}>
@@ -175,73 +504,83 @@ export default function Pedidos() {
                     <div
                       ref={provided.innerRef}
                       {...provided.droppableProps}
-                      className={`min-h-[200px] space-y-3 p-3 rounded-2xl transition-colors ${
-                        snapshot.isDraggingOver ? "bg-primary/5 border-2 border-primary/20" : "bg-muted/20"
+                      className={`flex-1 p-2 space-y-2 min-h-[200px] rounded-b-lg border-2 ${
+                        snapshot.isDraggingOver ? "border-primary bg-primary/5" : "border-border bg-muted/20"
                       }`}
                     >
-                      {pedidosDoStatus.map((pedido, index) => (
-                        <Draggable key={pedido.id} draggableId={pedido.id} index={index}>
-                          {(provided, snapshot) => (
-                            <Card
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              {...provided.dragHandleProps}
-                              className={`shadow-custom-md border-0 cursor-grab active:cursor-grabbing transition-all ${
-                                snapshot.isDragging ? "rotate-2 scale-105 shadow-custom-xl" : ""
-                              }`}
-                            >
-                              <CardHeader className="pb-3">
-                                <CardTitle className="text-base flex items-center justify-between">
-                                  <span className="truncate">{getClienteNome(pedido.clienteId)}</span>
-                                </CardTitle>
-                              </CardHeader>
-                              <CardContent className="space-y-3">
-                                <div className="flex items-center justify-between text-sm">
-                                  <span className="text-muted-foreground">{getTotalItens(pedido)} itens</span>
-                                  <span className="font-semibold text-foreground">
-                                    {new Intl.NumberFormat("pt-BR", {
-                                      style: "currency",
-                                      currency: "BRL",
-                                    }).format(pedido.total)}
-                                  </span>
-                                </div>
-
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <Badge variant={pedido.pago ? "default" : "outline"} className="text-xs">
-                                    {pedido.pago ? "Pago" : "Não pago"}
-                                  </Badge>
-                                  <Badge variant="secondary" className="text-xs">
-                                    {pedido.formaPagamento}
-                                  </Badge>
-                                </div>
-
-                                <div className="text-xs text-muted-foreground">
-                                  {format(pedido.dataCriacao, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                                </div>
-
-                                {pedido.observacoes && (
-                                  <p className="text-xs text-muted-foreground italic truncate">
-                                    {pedido.observacoes}
-                                  </p>
-                                )}
-
-                                <Button 
-                                  variant="outline" 
-                                  size="sm" 
-                                  className="w-full mt-2"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    abrirDetalhes(pedido);
-                                  }}
-                                >
-                                  <Eye className="h-3 w-3 mr-1" />
-                                  Ver Detalhes
-                                </Button>
-                              </CardContent>
-                            </Card>
-                          )}
-                        </Draggable>
-                      ))}
+                      {pedidosStatus.map((pedido, index) => {
+                        const cliente = clientes.find(c => c.id === pedido.clienteId);
+                        return (
+                          <Draggable key={pedido.id} draggableId={pedido.id!} index={index}>
+                            {(provided, snapshot) => (
+                              <Card
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                {...provided.dragHandleProps}
+                                className={`shadow-custom-sm cursor-move ${
+                                  snapshot.isDragging ? "shadow-custom-lg rotate-2" : ""
+                                }`}
+                              >
+                                <CardHeader className="p-3">
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <User className="h-4 w-4 text-muted-foreground" />
+                                      <span className="font-medium text-sm">{cliente?.nome || "Cliente"}</span>
+                                    </div>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6"
+                                      onClick={() => abrirDetalhes(pedido)}
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </CardHeader>
+                                <CardContent className="p-3 pt-0 space-y-2">
+                                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <ShoppingCart className="h-3 w-3" />
+                                    <span>{pedido.itens?.length || 0} itens</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <CreditCard className="h-3 w-3" />
+                                    <span>{pedido.canal}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between pt-2 border-t">
+                                    <span className="text-lg font-bold text-primary">
+                                      {new Intl.NumberFormat("pt-BR", {
+                                        style: "currency",
+                                        currency: "BRL",
+                                      }).format(pedido.valorTotal)}
+                                    </span>
+                                    <div className="flex gap-1">
+                                      <Button
+                                        variant="outline"
+                                        size="icon"
+                                        className="h-7 w-7"
+                                        onClick={() => abrirEditar(pedido)}
+                                      >
+                                        <Edit className="h-3 w-3" />
+                                      </Button>
+                                      {status === "ENTREGUE" && (
+                                        <Button
+                                          variant="outline"
+                                          size="icon"
+                                          className="h-7 w-7 text-success"
+                                          onClick={() => confirmarFinalizar(pedido)}
+                                          title="Finalizar pedido (mover para histórico)"
+                                        >
+                                          <Check className="h-3 w-3" />
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            )}
+                          </Draggable>
+                        );
+                      })}
                       {provided.placeholder}
                     </div>
                   )}
@@ -252,130 +591,76 @@ export default function Pedidos() {
         </div>
       </DragDropContext>
 
-      {/* Dialog de Detalhes do Pedido */}
+      {/* Dialog Detalhes */}
       <Dialog open={dialogDetalhesOpen} onOpenChange={setDialogDetalhesOpen}>
-        <DialogContent className="sm:max-w-[700px]">
+        <DialogContent className="sm:max-w-[600px]">
           {pedidoSelecionado && (
             <>
               <DialogHeader>
-                <DialogTitle className="text-2xl flex items-center gap-2">
-                  <Package className="h-6 w-6" />
-                  Detalhes do Pedido
-                </DialogTitle>
+                <DialogTitle>Detalhes do Pedido</DialogTitle>
                 <DialogDescription>
-                  Pedido #{pedidoSelecionado.id.substring(0, 8).toUpperCase()}
+                  Pedido #{pedidoSelecionado.id?.substring(0, 8)}
                 </DialogDescription>
               </DialogHeader>
-              
-              <div className="space-y-6 py-4">
-                {/* Informações do Cliente */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                    <User className="h-4 w-4" />
-                    Cliente
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Cliente</Label>
+                    <p className="font-medium">{clientes.find(c => c.id === pedidoSelecionado.clienteId)?.nome}</p>
                   </div>
-                  <Card className="border-2">
-                    <CardContent className="p-4">
-                      <p className="font-semibold text-lg">{getClienteNome(pedidoSelecionado.clienteId)}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {dataStore.clientes.find((c) => c.id === pedidoSelecionado.clienteId)?.telefone}
-                      </p>
-                    </CardContent>
-                  </Card>
+                  <div>
+                    <Label>Status</Label>
+                    <Badge className={statusConfig[pedidoSelecionado.status as StatusPedido].color}>
+                      {statusLabels[pedidoSelecionado.status as StatusPedido]}
+                    </Badge>
+                  </div>
                 </div>
 
-                {/* Itens do Pedido */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                    <ShoppingCart className="h-4 w-4" />
-                    Itens do Pedido
-                  </div>
-                  <Card className="border-2">
-                    <CardContent className="p-0">
-                      <div className="divide-y">
-                        {pedidoSelecionado.itens.map((item, index) => (
-                          <div key={index} className="p-4 flex items-center justify-between">
-                            <div className="flex-1">
-                              <p className="font-medium">{item.nome}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {item.qtd}x {new Intl.NumberFormat("pt-BR", {
-                                  style: "currency",
-                                  currency: "BRL",
-                                }).format(item.precoUnitario)}
-                              </p>
-                            </div>
-                            <p className="font-semibold text-lg">
-                              {new Intl.NumberFormat("pt-BR", {
-                                style: "currency",
-                                currency: "BRL",
-                              }).format(item.subtotal)}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="p-4 bg-muted/30 border-t-2 flex items-center justify-between">
-                        <span className="font-semibold text-lg">Total</span>
-                        <span className="font-bold text-2xl text-primary">
+                <div>
+                  <Label>Itens</Label>
+                  <div className="space-y-2 mt-2">
+                    {pedidoSelecionado.itens?.map((item, idx) => (
+                      <div key={idx} className="flex justify-between p-2 bg-muted/30 rounded">
+                        <span>{item.quantidade}x {item.nome}</span>
+                        <span className="font-semibold">
                           {new Intl.NumberFormat("pt-BR", {
                             style: "currency",
                             currency: "BRL",
-                          }).format(pedidoSelecionado.total)}
+                          }).format(item.precoUnit * item.quantidade)}
                         </span>
                       </div>
-                    </CardContent>
-                  </Card>
+                    ))}
+                  </div>
                 </div>
 
-                {/* Informações de Pagamento e Status */}
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                      <CreditCard className="h-4 w-4" />
-                      Pagamento
-                    </div>
-                    <div className="space-y-2">
-                      <Badge variant={pedidoSelecionado.pago ? "default" : "outline"} className="text-sm">
-                        {pedidoSelecionado.pago ? "✓ Pago" : "Pendente"}
-                      </Badge>
-                      <p className="text-sm font-medium">{pedidoSelecionado.formaPagamento}</p>
-                    </div>
+                  <div>
+                    <Label>Pagamento</Label>
+                    <p className="font-medium">{pedidoSelecionado.canal}</p>
                   </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                      <Clock className="h-4 w-4" />
-                      Status
-                    </div>
-                    <Badge variant="secondary" className="text-sm">
-                      {pedidoSelecionado.status}
-                    </Badge>
-                    <p className="text-xs text-muted-foreground">
-                      Criado: {format(pedidoSelecionado.dataCriacao, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                  <div>
+                    <Label>Total</Label>
+                    <p className="text-2xl font-bold text-primary">
+                      {new Intl.NumberFormat("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                      }).format(pedidoSelecionado.valorTotal)}
                     </p>
                   </div>
                 </div>
 
-                {/* Observações */}
                 {pedidoSelecionado.observacoes && (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                      <FileText className="h-4 w-4" />
-                      Observações
-                    </div>
-                    <Card className="border-2">
-                      <CardContent className="p-4">
-                        <p className="text-sm">{pedidoSelecionado.observacoes}</p>
-                      </CardContent>
-                    </Card>
+                  <div>
+                    <Label>Observações</Label>
+                    <p className="text-sm text-muted-foreground mt-1">{pedidoSelecionado.observacoes}</p>
                   </div>
                 )}
               </div>
-
               <div className="flex justify-end gap-3">
                 <Button variant="outline" onClick={() => setDialogDetalhesOpen(false)}>
                   Fechar
                 </Button>
-                <Button className="gradient-primary text-white">
+                <Button onClick={() => { setDialogDetalhesOpen(false); abrirEditar(pedidoSelecionado); }}>
                   Editar Pedido
                 </Button>
               </div>
@@ -384,179 +669,140 @@ export default function Pedidos() {
         </DialogContent>
       </Dialog>
 
-      <Card className="shadow-custom-md border-0">
-        <CardHeader>
-          <CardTitle className="text-foreground">Ações Rápidas</CardTitle>
-        </CardHeader>
-        <CardContent className="flex gap-3 flex-wrap">
-          <Dialog open={dialogNovoOpen} onOpenChange={setDialogNovoOpen}>
-            <DialogTrigger asChild>
-              <Button className="gradient-primary text-white shadow-custom-md hover:shadow-custom-lg transition-all">
-                <Plus className="h-4 w-4 mr-2" />
-                Novo Pedido
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[700px] max-h-[90vh]">
-              <DialogHeader>
-                <DialogTitle>Criar Novo Pedido</DialogTitle>
-                <DialogDescription>
-                  Selecione o cliente e os itens do cardápio
-                </DialogDescription>
-              </DialogHeader>
-              
-              <ScrollArea className="max-h-[60vh] pr-4">
-                <div className="space-y-6 py-4">
-                  {/* Cliente */}
-                  <div className="space-y-2">
-                    <Label htmlFor="cliente">Cliente *</Label>
-                    <Select value={novoClienteId} onValueChange={setNovoClienteId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione um cliente" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {dataStore.clientes.map((cliente) => (
-                          <SelectItem key={cliente.id} value={cliente.id}>
-                            {cliente.nome} - {cliente.telefone}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Itens do Cardápio */}
-                  <div className="space-y-2">
-                    <Label>Itens do Pedido *</Label>
-                    <Card className="border-2">
-                      <CardContent className="p-4 space-y-3">
-                        {dataStore.cardapio
-                          .filter((item) => item.ativo)
-                          .map((item) => {
-                            const qtd = itensSelecionados.get(item.id) || 0;
-                            return (
-                              <div key={item.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                                <div className="flex-1">
-                                  <p className="font-medium">{item.nome}</p>
-                                  <p className="text-sm text-muted-foreground">
-                                    {new Intl.NumberFormat("pt-BR", {
-                                      style: "currency",
-                                      currency: "BRL",
-                                    }).format(item.preco)}
-                                  </p>
-                                  <Badge variant="secondary" className="text-xs mt-1">
-                                    {item.categoria}
-                                  </Badge>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  {qtd > 0 ? (
-                                    <>
-                                      <Button
-                                        variant="outline"
-                                        size="icon"
-                                        className="h-8 w-8"
-                                        onClick={() => removerItem(item.id)}
-                                      >
-                                        <Minus className="h-4 w-4" />
-                                      </Button>
-                                      <span className="w-8 text-center font-semibold">{qtd}</span>
-                                      <Button
-                                        variant="default"
-                                        size="icon"
-                                        className="h-8 w-8"
-                                        onClick={() => adicionarItem(item.id)}
-                                      >
-                                        <Plus className="h-4 w-4" />
-                                      </Button>
-                                    </>
-                                  ) : (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => adicionarItem(item.id)}
-                                    >
-                                      <Plus className="h-4 w-4 mr-1" />
-                                      Adicionar
-                                    </Button>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  {/* Resumo do Pedido */}
-                  {itensSelecionados.size > 0 && (
-                    <Card className="border-2 bg-primary/5">
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="font-medium">Total de itens:</span>
-                          <span className="font-semibold">
-                            {Array.from(itensSelecionados.values()).reduce((a, b) => a + b, 0)}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-lg">Total do Pedido:</span>
-                          <span className="font-bold text-2xl text-primary">
-                            {new Intl.NumberFormat("pt-BR", {
-                              style: "currency",
-                              currency: "BRL",
-                            }).format(calcularTotal())}
-                          </span>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {/* Forma de Pagamento */}
-                  <div className="space-y-2">
-                    <Label htmlFor="formaPagamento">Forma de Pagamento</Label>
-                    <Select value={novaFormaPagamento} onValueChange={setNovaFormaPagamento}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Dinheiro">Dinheiro</SelectItem>
-                        <SelectItem value="PIX">PIX</SelectItem>
-                        <SelectItem value="Cartão">Cartão</SelectItem>
-                        <SelectItem value="Transferência">Transferência</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Observações */}
-                  <div className="space-y-2">
-                    <Label htmlFor="observacoes">Observações</Label>
-                    <Textarea
-                      id="observacoes"
-                      placeholder="Ex: Sem cebola, cliente prefere bem passado..."
-                      value={novasObservacoes}
-                      onChange={(e) => setNovasObservacoes(e.target.value)}
-                      rows={3}
-                    />
-                  </div>
-                </div>
-              </ScrollArea>
-
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <Button variant="outline" onClick={() => {
-                  setDialogNovoOpen(false);
-                  setItensSelecionados(new Map());
-                }}>
-                  Cancelar
-                </Button>
-                <Button onClick={criarNovoPedido} className="gradient-primary text-white">
-                  <ShoppingCart className="h-4 w-4 mr-2" />
-                  Criar Pedido
-                </Button>
+      {/* Dialog Editar - Similar ao Novo, mas com dados preenchidos */}
+      <Dialog open={dialogEditarOpen} onOpenChange={setDialogEditarOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Editar Pedido</DialogTitle>
+            <DialogDescription>
+              Altere as informações do pedido (será salvo no PostgreSQL)
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[500px] pr-4">
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Cliente *</Label>
+                <Select value={editarClienteId} onValueChange={setEditarClienteId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um cliente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clientes.map((cliente) => (
+                      <SelectItem key={cliente.id} value={cliente.id!}>
+                        {cliente.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-            </DialogContent>
-          </Dialog>
-          <Button variant="outline">Hoje</Button>
-          <Button variant="outline">7 dias</Button>
-          <Button variant="outline">30 dias</Button>
-        </CardContent>
-      </Card>
+
+              <div className="space-y-2">
+                <Label>Itens do Pedido *</Label>
+                <div className="space-y-2 max-h-64 overflow-y-auto border rounded-md p-2">
+                  {cardapio.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between p-2 border rounded-md">
+                      <div className="flex-1">
+                        <p className="font-medium">{item.nome}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {new Intl.NumberFormat("pt-BR", {
+                            style: "currency",
+                            currency: "BRL",
+                          }).format(item.preco)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => removerItemEditar(item.id!)}
+                          disabled={!editarItensSelecionados.has(item.id!)}
+                        >
+                          <Minus className="h-4 w-4" />
+                        </Button>
+                        <span className="w-8 text-center">
+                          {editarItensSelecionados.get(item.id!) || 0}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => adicionarItemEditar(item.id!)}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Canal do Pedido</Label>
+                <Select value={editarCanal} onValueChange={setEditarCanal}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PRESENCIAL">Presencial</SelectItem>
+                    <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
+                    <SelectItem value="TELEFONE">Telefone</SelectItem>
+                    <SelectItem value="WEB">Web</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Observações</Label>
+                <Textarea
+                  placeholder="Observações do pedido..."
+                  value={editarObservacoes}
+                  onChange={(e) => setEditarObservacoes(e.target.value)}
+                  rows={3}
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                <span className="font-medium">Total:</span>
+                <span className="text-2xl font-bold text-primary">
+                  {new Intl.NumberFormat("pt-BR", {
+                    style: "currency",
+                    currency: "BRL",
+                  }).format(calcularTotalEditar())}
+                </span>
+              </div>
+            </div>
+          </ScrollArea>
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setDialogEditarOpen(false)} disabled={salvando}>
+              Cancelar
+            </Button>
+            <Button onClick={salvarEdicao} className="gradient-primary text-white" disabled={salvando}>
+              {salvando ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Salvando...</> : "Salvar Alterações"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Alert Finalizar */}
+      <AlertDialog open={alertExcluirOpen} onOpenChange={setAlertExcluirOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Finalizar Pedido?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O pedido será marcado como finalizado e movido para o histórico. Ele não será excluído do banco de dados, apenas não aparecerá mais no Kanban.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={finalizarPedido} className="bg-success text-white">
+              Finalizar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

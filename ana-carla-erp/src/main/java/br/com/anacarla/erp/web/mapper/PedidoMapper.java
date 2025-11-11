@@ -15,6 +15,7 @@ public interface PedidoMapper {
     PedidoDTO toDTO(Pedido entity);
 
     @Mapping(target = "cliente", ignore = true)
+    @Mapping(target = "itens", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     Pedido toEntity(PedidoDTO dto);

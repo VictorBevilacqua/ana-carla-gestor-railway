@@ -69,15 +69,12 @@ public class CardapioWhatsAppFormatter {
 
     private String formatarCategoria(CategoriaCardapio categoria) {
         return switch (categoria) {
-            case BOVINO -> "Bovino";
-            case FRANGO -> "Frango";
-            case PORCO -> "Porco";
-            case PEIXE -> "Peixe";
-            case VEGETARIANO -> "Vegetariano";
+            case PROTEINA -> "Proteínas";
             case ACOMPANHAMENTO -> "Acompanhamentos";
             case SALADA -> "Saladas";
             case SOBREMESA -> "Sobremesas";
             case BEBIDA -> "Bebidas";
+            case BOWL -> "Bowls";
         };
     }
 

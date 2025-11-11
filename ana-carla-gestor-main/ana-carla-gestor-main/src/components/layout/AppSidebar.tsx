@@ -32,7 +32,7 @@ export function AppSidebar() {
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel className="text-base font-bold px-4 py-6">
-            {open && "ERP Ana Carla"}
+            {open && "Pitada Saudável"}
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>

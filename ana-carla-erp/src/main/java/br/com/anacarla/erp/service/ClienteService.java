@@ -12,7 +12,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -22,6 +24,23 @@ public class ClienteService {
 
     private final ClienteRepository clienteRepository;
     private final ClienteMapper clienteMapper;
+
+    @Transactional(readOnly = true)
+    public List<ClienteDTO> listarTodos(String busca) {
+        log.debug("Listando todos os clientes com termo: {}", busca);
+        List<Cliente> clientes;
+        if (busca == null || busca.isBlank()) {
+            clientes = clienteRepository.findAll();
+        } else {
+            // Buscar sem paginação - usar método do repository se existir
+            clientes = clienteRepository.findAll().stream()
+                    .filter(c -> c.getNome().toLowerCase().contains(busca.toLowerCase()) ||
+                            (c.getEmail() != null && c.getEmail().toLowerCase().contains(busca.toLowerCase())) ||
+                            (c.getTelefones() != null && c.getTelefones().contains(busca)))
+                    .collect(Collectors.toList());
+        }
+        return clientes.stream().map(clienteMapper::toDTO).collect(Collectors.toList());
+    }
 
     public Page<ClienteDTO> buscar(String busca, Pageable pageable) {
         log.debug("Buscando clientes com termo: {}", busca);
