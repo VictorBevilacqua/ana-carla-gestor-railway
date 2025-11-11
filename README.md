@@ -6,7 +6,7 @@ Sistema de gestão completo para empresa de marmitas saudáveis, desenvolvido co
 
 - **Cliente**: Ana Carla - Pitada Saudável
 - **Curso**: Ciência de Dados
-- **Disciplina**: Programação Orientada a Objetos (POO)
+- **Disciplina**: Projeto II
 - **Tecnologia Principal**: Java 21 + Spring Boot
 
 ---
