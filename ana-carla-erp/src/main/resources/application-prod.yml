@@ -3,10 +3,29 @@ spring:
     url: ${SPRING_DATASOURCE_URL}
     username: ${SPRING_DATASOURCE_USERNAME}
     password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
   jpa:
+    hibernate:
+      ddl-auto: update
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: false
 
-# Em produção é bom desativar o console H2
-spring.h2.console.enabled: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+  h2:
+    console:
+      enabled: false
+
+server:
+  port: 8080
+
+app:
+  security:
+    jwt:
+      secret: ${JWT_SECRET}
+
