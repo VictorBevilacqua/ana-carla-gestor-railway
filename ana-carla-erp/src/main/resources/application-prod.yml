@@ -1,25 +1,12 @@
 spring:
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:anacarla}
-    username: ${DB_USER:anacarla}
-    password: ${DB_PASSWORD:secret}
-    driver-class-name: org.postgresql.Driver
-  
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
   jpa:
-    hibernate:
-      ddl-auto: validate
     properties:
       hibernate:
-        jdbc:
-          time_zone: UTC
-    show-sql: false
-  
-  flyway:
-    enabled: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
 
-logging:
-  level:
-    br.com.anacarla: INFO
-    org.springframework.security: WARN
-    org.hibernate.SQL: WARN
-
+# Em produção é bom desativar o console H2
+spring.h2.console.enabled: false
