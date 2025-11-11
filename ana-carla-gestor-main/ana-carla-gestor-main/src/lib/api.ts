@@ -2,10 +2,9 @@
 
 // 1) Usa VITE_API_URL se existir; senão, cai pro domínio do Railway.
 // 2) Remove eventuais barras no final para evitar // nas URLs.
-const API_BASE_URL = (
-  import.meta?.env?.VITE_API_URL ??
-  "https://anacarlabackend.up.railway.app"
-).replace(/\/+$/, "");
+// src/lib/api.ts
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? "/api";
+
 
 // Tipos mapeados do backend
 export interface ClienteDTO {
