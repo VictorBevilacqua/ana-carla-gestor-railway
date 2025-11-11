@@ -1,6 +1,11 @@
 // API Client para conectar com o backend Spring Boot
 
-const API_BASE_URL = 'http://localhost:8080';
+// 1) Usa VITE_API_URL se existir; senão, cai pro domínio do Railway.
+// 2) Remove eventuais barras no final para evitar // nas URLs.
+const API_BASE_URL = (
+  import.meta?.env?.VITE_API_URL ??
+  "https://anacarlabackend.up.railway.app"
+).replace(/\/+$/, "");
 
 // Tipos mapeados do backend
 export interface ClienteDTO {
@@ -66,16 +71,16 @@ export interface LoginResponse {
 }
 
 // Token storage
-let authToken: string | null = localStorage.getItem('auth_token');
+let authToken: string | null = localStorage.getItem("auth_token");
 
 export const setAuthToken = (token: string) => {
   authToken = token;
-  localStorage.setItem('auth_token', token);
+  localStorage.setItem("auth_token", token);
 };
 
 export const clearAuthToken = () => {
   authToken = null;
-  localStorage.removeItem('auth_token');
+  localStorage.removeItem("auth_token");
 };
 
 export const getAuthToken = () => authToken;
@@ -86,12 +91,12 @@ async function apiRequest<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const headers: HeadersInit = {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
     ...options.headers,
   };
 
   if (authToken) {
-    headers['Authorization'] = `Bearer ${authToken}`;
+    headers["Authorization"] = `Bearer ${authToken}`;
   }
 
   try {
@@ -101,23 +106,22 @@ async function apiRequest<T>(
     });
 
     // Verificar se a resposta é HTML (erro do servidor)
-    const contentType = response.headers.get('content-type') || '';
-    const isJson = contentType.includes('application/json');
-    
+    const contentType = response.headers.get("content-type") || "";
+    const isJson = contentType.includes("application/json");
+
     if (!response.ok) {
       if (response.status === 401) {
         clearAuthToken();
-        throw new Error('Sessão expirada. Faça login novamente.');
+        throw new Error("Sessão expirada. Faça login novamente.");
       }
-      
+
       let errorMessage = `Erro ${response.status}`;
       if (isJson) {
         try {
           const error = await response.json();
-          console.error('Erro do servidor:', error);
-          // Tentar extrair mensagens de validação
+          console.error("Erro do servidor:", error);
           if (error.errors && Array.isArray(error.errors)) {
-            errorMessage = error.errors.join(', ');
+            errorMessage = error.errors.join(", ");
           } else if (error.message) {
             errorMessage = error.message;
           } else if (error.error) {
@@ -131,23 +135,23 @@ async function apiRequest<T>(
           errorMessage = response.statusText || errorMessage;
         }
       } else {
-        // Se não for JSON, tentar ler como texto para debug
         const text = await response.text();
-        console.error('Resposta não-JSON recebida:', text.substring(0, 500));
+        console.error("Resposta não-JSON recebida:", text.substring(0, 500));
         errorMessage = `Erro do servidor: ${response.status} ${response.statusText}`;
       }
       throw new Error(errorMessage);
     }
 
-    // Se for resposta 204 No Content (DELETE bem-sucedido), retornar void
     if (response.status === 204) {
       return undefined as any;
     }
 
     if (!isJson) {
       const text = await response.text();
-      console.error('Resposta não-JSON recebida:', text.substring(0, 200));
-      throw new Error(`Resposta inválida do servidor: esperado JSON, recebido ${contentType}`);
+      console.error("Resposta não-JSON recebida:", text.substring(0, 200));
+      throw new Error(
+        `Resposta inválida do servidor: esperado JSON, recebido ${contentType}`
+      );
     }
 
     return response.json();
@@ -155,15 +159,15 @@ async function apiRequest<T>(
     if (error instanceof Error) {
       throw error;
     }
-    throw new Error(error.message || 'Erro desconhecido');
+    throw new Error(error?.message || "Erro desconhecido");
   }
 }
 
 // API de Autenticação
 export const authAPI = {
   login: async (email: string, senha: string): Promise<LoginResponse> => {
-    const response = await apiRequest<LoginResponse>('/auth/login', {
-      method: 'POST',
+    const response = await apiRequest<LoginResponse>("/auth/login", {
+      method: "POST",
       body: JSON.stringify({ email, senha }),
     });
     setAuthToken(response.token);
@@ -177,95 +181,95 @@ export const authAPI = {
 
 // API de Clientes
 export const clientesAPI = {
-  listar: () => apiRequest<ClienteDTO[]>('/clientes'),
-  
+  listar: () => apiRequest<ClienteDTO[]>("/clientes"),
+
   buscar: (id: string) => apiRequest<ClienteDTO>(`/clientes/${id}`),
-  
+
   criar: (cliente: ClienteDTO) =>
-    apiRequest<ClienteDTO>('/clientes', {
-      method: 'POST',
+    apiRequest<ClienteDTO>("/clientes", {
+      method: "POST",
       body: JSON.stringify(cliente),
     }),
-  
+
   atualizar: (id: string, cliente: Partial<ClienteDTO>) =>
     apiRequest<ClienteDTO>(`/clientes/${id}`, {
-      method: 'PUT',
+      method: "PUT",
       body: JSON.stringify(cliente),
     }),
-  
+
   deletar: (id: string) =>
     apiRequest<void>(`/clientes/${id}`, {
-      method: 'DELETE',
+      method: "DELETE",
     }),
 };
 
 // API de Cardápio
 export const cardapioAPI = {
   listar: (ativo?: boolean) => {
-    const query = ativo !== undefined ? `?ativo=${ativo}` : '';
+    const query = ativo !== undefined ? `?ativo=${ativo}` : "";
     return apiRequest<CardapioItemDTO[]>(`/cardapio${query}`);
   },
-  
+
   buscar: (id: string) => apiRequest<CardapioItemDTO>(`/cardapio/${id}`),
-  
+
   criar: (item: CardapioItemDTO) =>
-    apiRequest<CardapioItemDTO>('/cardapio', {
-      method: 'POST',
+    apiRequest<CardapioItemDTO>("/cardapio", {
+      method: "POST",
       body: JSON.stringify(item),
     }),
-  
+
   atualizar: (id: string, item: Partial<CardapioItemDTO>) =>
     apiRequest<CardapioItemDTO>(`/cardapio/${id}`, {
-      method: 'PUT',
+      method: "PUT",
       body: JSON.stringify(item),
     }),
-  
+
   ativarDesativar: (id: string, ativo: boolean) =>
     apiRequest<CardapioItemDTO>(`/cardapio/${id}/ativo`, {
-      method: 'PATCH',
+      method: "PATCH",
       body: JSON.stringify({ ativo }),
     }),
-  
-  getWhatsAppText: () => apiRequest<{ texto: string }>('/cardapio/whatsapp-text'),
+
+  getWhatsAppText: () =>
+    apiRequest<{ texto: string }>("/cardapio/whatsapp-text"),
 };
 
 // API de Pedidos
 export const pedidosAPI = {
   listar: (status?: string) => {
-    const query = status ? `?status=${status}` : '';
+    const query = status ? `?status=${status}` : "";
     return apiRequest<PedidoDTO[]>(`/pedidos${query}`);
   },
-  
+
   buscar: (id: string) => apiRequest<PedidoDTO>(`/pedidos/${id}`),
-  
+
   criar: (pedido: PedidoDTO) =>
-    apiRequest<PedidoDTO>('/pedidos', {
-      method: 'POST',
+    apiRequest<PedidoDTO>("/pedidos", {
+      method: "POST",
       body: JSON.stringify(pedido),
     }),
-  
+
   atualizar: (id: string, pedido: Partial<PedidoDTO>) =>
     apiRequest<PedidoDTO>(`/pedidos/${id}`, {
-      method: 'PUT',
+      method: "PUT",
       body: JSON.stringify(pedido),
     }),
-  
+
   atualizarStatus: (id: string, status: string) =>
     apiRequest<PedidoDTO>(`/pedidos/${id}/status`, {
-      method: 'PATCH',
+      method: "PATCH",
       body: JSON.stringify({ status }),
     }),
-  
+
   deletar: (id: string) =>
     apiRequest<void>(`/pedidos/${id}`, {
-      method: 'DELETE',
+      method: "DELETE",
     }),
-  
-  kanban: () => apiRequest<Record<string, PedidoDTO[]>>('/pedidos/kanban'),
+
+  kanban: () => apiRequest<Record<string, PedidoDTO[]>>("/pedidos/kanban"),
 };
 
 // Health Check
 export const healthAPI = {
-  check: () => apiRequest<{ status: string }>('/actuator/health'),
+  check: () => apiRequest<{ status: string }>("/actuator/health"),
 };
-
