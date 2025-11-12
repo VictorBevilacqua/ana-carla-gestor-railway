@@ -3,7 +3,14 @@
 // 1) Usa VITE_API_URL se existir; senão, cai pro domínio do Railway.
 // 2) Remove eventuais barras no final para evitar // nas URLs.
 // src/lib/api.ts
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+// api.ts
+
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ??
+  (import.meta.env.DEV
+    ? 'http://localhost:8080'          // quando você estiver rodando o back local
+    : 'https://anacarlabackend.up.railway.app'); // fallback em produção
+
 
 
 
