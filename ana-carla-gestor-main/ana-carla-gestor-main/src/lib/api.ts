@@ -3,7 +3,8 @@
 // 1) Usa VITE_API_URL se existir; senão, cai pro domínio do Railway.
 // 2) Remove eventuais barras no final para evitar // nas URLs.
 // src/lib/api.ts
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? "/api";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
 
 
 // Tipos mapeados do backend
