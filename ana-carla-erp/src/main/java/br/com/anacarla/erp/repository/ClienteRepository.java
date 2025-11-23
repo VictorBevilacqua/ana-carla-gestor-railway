@@ -19,16 +19,37 @@ public interface ClienteRepository extends JpaRepository<Cliente, UUID> {
 
     Optional<Cliente> findByCpfCnpj(String cpfCnpj);
 
-    @Query("SELECT c FROM Cliente c WHERE " +
+    // -------------------------
+    // 🔥 SOFT DELETE – SOMENTE CLIENTES ATIVOS
+    // -------------------------
+
+    List<Cliente> findByAtivoTrue();
+
+    Page<Cliente> findByAtivoTrue(Pageable pageable);
+
+    /**
+     * Busca com filtro (por nome, email ou telefone)
+     * incluindo SOMENTE clientes ativos.
+     */
+    @Query("SELECT c FROM Cliente c " +
+           "WHERE c.ativo = true AND (" +
            "LOWER(c.nome) LIKE LOWER(CONCAT('%', :busca, '%')) OR " +
            "LOWER(c.email) LIKE LOWER(CONCAT('%', :busca, '%')) OR " +
-           "c.telefones LIKE CONCAT('%', :busca, '%')")
+           "c.telefones LIKE CONCAT('%', :busca, '%')" +
+           ")")
     Page<Cliente> buscar(@Param("busca") String busca, Pageable pageable);
 
-    @Query("SELECT c FROM Cliente c WHERE c.recenciaDias > :limiar")
+    /**
+     * Clientes com alto risco de churn (ainda somente ativos)
+     */
+    @Query("SELECT c FROM Cliente c WHERE c.ativo = true AND c.recenciaDias > :limiar")
     List<Cliente> findClientesEmRiscoChurn(@Param("limiar") Integer limiar);
 
-    @Query("SELECT AVG(c.intervaloMedioRecompra) FROM Cliente c WHERE c.intervaloMedioRecompra IS NOT NULL")
+    /**
+     * Média do intervalo de recompra (só conta clientes ativos)
+     */
+    @Query("SELECT AVG(c.intervaloMedioRecompra) " +
+           "FROM Cliente c " +
+           "WHERE c.ativo = true AND c.intervaloMedioRecompra IS NOT NULL")
     Double calcularIntervaloMedioGlobal();
 }
-
