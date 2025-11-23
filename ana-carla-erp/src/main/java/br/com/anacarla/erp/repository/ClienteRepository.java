@@ -19,10 +19,15 @@ public interface ClienteRepository extends JpaRepository<Cliente, UUID> {
 
     Optional<Cliente> findByCpfCnpj(String cpfCnpj);
 
-    // Lista só clientes ativos
+    // ---- CLIENTES ATIVOS ----
+
+    // lista simples (sem paginação)
     List<Cliente> findByAtivoTrue();
 
-    // Busca paginada só em clientes ativos
+    // lista paginada
+    Page<Cliente> findByAtivoTrue(Pageable pageable);
+
+    // busca paginada apenas em ativos
     @Query("""
            SELECT c FROM Cliente c
            WHERE c.ativo = TRUE AND (
@@ -33,9 +38,18 @@ public interface ClienteRepository extends JpaRepository<Cliente, UUID> {
            """)
     Page<Cliente> buscar(@Param("busca") String busca, Pageable pageable);
 
-    @Query("SELECT c FROM Cliente c WHERE c.recenciaDias > :limiar AND c.ativo = TRUE")
+    @Query("""
+           SELECT c FROM Cliente c
+           WHERE c.recenciaDias > :limiar
+             AND c.ativo = TRUE
+           """)
     List<Cliente> findClientesEmRiscoChurn(@Param("limiar") Integer limiar);
 
-    @Query("SELECT AVG(c.intervaloMedioRecompra) FROM Cliente c WHERE c.intervaloMedioRecompra IS NOT NULL AND c.ativo = TRUE")
+    @Query("""
+           SELECT AVG(c.intervaloMedioRecompra)
+           FROM Cliente c
+           WHERE c.intervaloMedioRecompra IS NOT NULL
+             AND c.ativo = TRUE
+           """)
     Double calcularIntervaloMedioGlobal();
 }
