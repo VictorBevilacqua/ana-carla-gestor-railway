@@ -24,8 +24,8 @@ import java.util.stream.Collectors;
 public class ClienteService {
 
     private final ClienteRepository clienteRepository;
-    private final ClienteMapper clienteMapper;
     private final PedidoRepository pedidoRepository;
+    private final ClienteMapper clienteMapper;
 
     @Transactional(readOnly = true)
     public List<ClienteDTO> listarTodos(String busca) {
@@ -33,17 +33,12 @@ public class ClienteService {
         List<Cliente> clientes;
 
         if (busca == null || busca.isBlank()) {
-            // Somente clientes ativos
             clientes = clienteRepository.findByAtivoTrue();
         } else {
-            String termo = busca.toLowerCase();
-            // Filtra somente ativos e aplica a busca
             clientes = clienteRepository.findByAtivoTrue().stream()
-                    .filter(c ->
-                            c.getNome().toLowerCase().contains(termo) ||
-                            (c.getEmail() != null && c.getEmail().toLowerCase().contains(termo)) ||
-                            (c.getTelefones() != null && c.getTelefones().contains(busca))
-                    )
+                    .filter(c -> c.getNome().toLowerCase().contains(busca.toLowerCase())
+                            || (c.getEmail() != null && c.getEmail().toLowerCase().contains(busca.toLowerCase()))
+                            || (c.getTelefones() != null && c.getTelefones().contains(busca)))
                     .collect(Collectors.toList());
         }
 
@@ -52,14 +47,13 @@ public class ClienteService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
     public Page<ClienteDTO> buscar(String busca, Pageable pageable) {
         log.debug("Buscando clientes com termo: {}", busca);
         if (busca == null || busca.isBlank()) {
-            // Somente ativos na paginação sem filtro
-            return clienteRepository.findByAtivoTrue(pageable)
+            return clienteRepository.findByAtivoTrue(pageable)   // se quiser, cria esse método
                     .map(clienteMapper::toDTO);
         }
-        // Query já filtra ativo = true (ajustada no ClienteRepository)
         return clienteRepository.buscar(busca, pageable)
                 .map(clienteMapper::toDTO);
     }
@@ -67,7 +61,6 @@ public class ClienteService {
     public ClienteDTO criar(ClienteDTO dto) {
         log.info("Criando novo cliente: {}", dto.getNome());
 
-        // Validações
         if (dto.getEmail() != null && clienteRepository.findByEmail(dto.getEmail()).isPresent()) {
             throw new IllegalArgumentException("Email já cadastrado");
         }
@@ -77,10 +70,8 @@ public class ClienteService {
         }
 
         Cliente entity = clienteMapper.toEntity(dto);
-        // garante que nasce ativo
-        if (entity.getAtivo() == null) {
-            entity.setAtivo(true);
-        }
+        // garante que começa ativo
+        entity.setAtivo(true);
 
         entity = clienteRepository.save(entity);
         return clienteMapper.toDTO(entity);
@@ -99,7 +90,6 @@ public class ClienteService {
         Cliente entity = clienteRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Cliente não encontrado"));
 
-        // Validar email se mudou
         if (dto.getEmail() != null && !dto.getEmail().equals(entity.getEmail())) {
             if (clienteRepository.findByEmail(dto.getEmail()).isPresent()) {
                 throw new IllegalArgumentException("Email já cadastrado");
@@ -119,28 +109,20 @@ public class ClienteService {
         return clienteMapper.toMetricasDTO(cliente);
     }
 
-    /**
-     * Regra:
-     * - Se não tiver pedidos: deleta de verdade.
-     * - Se tiver pedidos: NÃO deleta, apenas inativa (some da plataforma, mantém histórico).
-     */
     public void deletar(UUID id) {
-        log.info("Deletando / inativando cliente: {}", id);
+        log.info("Inativando / deletando cliente: {}", id);
 
         Cliente cliente = clienteRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Cliente não encontrado"));
 
-        boolean temPedidos = pedidoRepository.existsByCliente_Id(id);
-
-        if (temPedidos) {
-            // Soft delete: só inativa
-            log.info("Cliente {} possui pedidos. Será apenas inativado.", id);
+        // Se tiver pedidos, só inativa
+        if (pedidoRepository.existsByCliente_Id(id)) {
             cliente.setAtivo(false);
             clienteRepository.save(cliente);
-        } else {
-            // Sem pedidos vinculados: pode remover de verdade
-            log.info("Cliente {} não possui pedidos. Será deletado do banco.", id);
-            clienteRepository.deleteById(id);
+            return;
         }
+
+        // Se não tiver pedidos, pode excluir de verdade
+        clienteRepository.delete(cliente);
     }
 }
