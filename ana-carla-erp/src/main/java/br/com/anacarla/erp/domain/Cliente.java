@@ -15,8 +15,10 @@ import java.util.Map;
 @Table(name = "clientes", indexes = {
     @Index(name = "idx_cliente_email", columnList = "email"),
     @Index(name = "idx_cliente_cpf_cnpj", columnList = "cpf_cnpj"),
-    @Index(name = "idx_cliente_recencia", columnList = "recencia_dias")
+    @Index(name = "idx_cliente_recencia", columnList = "recencia_dias"),
+    @Index(name = "idx_cliente_ativo", columnList = "ativo")
 })
+
 @Getter
 @Setter
 @NoArgsConstructor
@@ -87,7 +89,11 @@ public class Cliente extends BaseEntity {
     @Column(name = "rfm", columnDefinition = "jsonb")
     private Map<String, Object> rfm;
 
+    @Column(nullable = false)
+    private Boolean ativo = true;
+
     @Column(columnDefinition = "TEXT")
     private String observacoes;
 }
+
 
