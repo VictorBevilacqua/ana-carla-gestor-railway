@@ -1,0 +1,107 @@
+# ===============================================
+# Ana Carla ERP - Lista de Dependências Maven
+# ===============================================
+# Equivalente ao requirements.txt para Python
+# Arquivo de referência - As dependências estão configuradas no pom.xml
+# ===============================================
+
+# VERSÃO DO PROJETO
+ana-carla-erp==1.0.0
+
+# JAVA
+java>=21
+
+# ===============================================
+# SPRING BOOT FRAMEWORK
+# ===============================================
+org.springframework.boot:spring-boot-starter-parent==3.2.0
+org.springframework.boot:spring-boot-starter-web==3.2.0
+org.springframework.boot:spring-boot-starter-data-jpa==3.2.0
+org.springframework.boot:spring-boot-starter-validation==3.2.0
+org.springframework.boot:spring-boot-starter-security==3.2.0
+org.springframework.boot:spring-boot-starter-cache==3.2.0
+org.springframework.boot:spring-boot-starter-actuator==3.2.0
+
+# ===============================================
+# BANCO DE DADOS
+# ===============================================
+org.postgresql:postgresql==42.7.1
+com.h2database:h2==2.2.224
+org.flywaydb:flyway-core==10.4.1
+org.flywaydb:flyway-database-postgresql==10.4.1
+
+# ===============================================
+# SEGURANÇA & JWT
+# ===============================================
+io.jsonwebtoken:jjwt-api==0.12.3
+io.jsonwebtoken:jjwt-impl==0.12.3
+io.jsonwebtoken:jjwt-jackson==0.12.3
+
+# ===============================================
+# CACHE
+# ===============================================
+com.github.ben-manes.caffeine:caffeine==3.1.8
+
+# ===============================================
+# MAPEAMENTO & UTILS
+# ===============================================
+org.mapstruct:mapstruct==1.5.5.Final
+org.mapstruct:mapstruct-processor==1.5.5.Final
+org.projectlombok:lombok==1.18.30
+
+# ===============================================
+# JSON & PERSISTÊNCIA
+# ===============================================
+com.fasterxml.jackson.core:jackson-databind==2.15.3
+com.fasterxml.jackson.datatype:jackson-datatype-jsr310==2.15.3
+io.hypersistence:hypersistence-utils-hibernate-63==3.7.0
+
+# ===============================================
+# DOCUMENTAÇÃO
+# ===============================================
+org.springdoc:springdoc-openapi-starter-webmvc-ui==2.3.0
+
+# ===============================================
+# TESTES
+# ===============================================
+org.springframework.boot:spring-boot-starter-test==3.2.0
+org.springframework.security:spring-security-test==6.2.0
+org.testcontainers:testcontainers==1.19.3
+org.testcontainers:postgresql==1.19.3
+org.testcontainers:junit-jupiter==1.19.3
+org.junit.jupiter:junit-jupiter==5.10.1
+
+# ===============================================
+# BUILD TOOLS
+# ===============================================
+org.apache.maven:maven-compiler-plugin==3.11.0
+org.springframework.boot:spring-boot-maven-plugin==3.2.0
+
+# ===============================================
+# INSTALAÇÃO
+# ===============================================
+# 
+# Este projeto usa Maven para gerenciamento de dependências.
+# Não é necessário instalar as dependências manualmente.
+#
+# EXECUTAR O PROJETO:
+#   mvnw.cmd clean spring-boot:run    (Windows)
+#   ./mvnw clean spring-boot:run       (Linux/Mac)
+#
+# INSTALAR DEPENDÊNCIAS (opcional):
+#   mvnw.cmd dependency:resolve
+#
+# BUILD DO PROJETO:
+#   mvnw.cmd clean package
+#
+# ===============================================
+# PRÉ-REQUISITOS DO SISTEMA
+# ===============================================
+# ✅ Java 21 ou superior
+# ⚠️ Maven (opcional - projeto inclui Maven Wrapper)
+# ⚠️ PostgreSQL (apenas produção - dev usa H2)
+# ⚠️ Docker (opcional - para produção)
+#
+# Consulte REQUIREMENTS.md para detalhes completos
+# ===============================================
+
