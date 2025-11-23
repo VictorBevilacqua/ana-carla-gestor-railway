@@ -1,0 +1,4 @@
+ALTER TABLE clientes
+ADD COLUMN IF NOT EXISTS ativo BOOLEAN NOT NULL DEFAULT TRUE;
+
+CREATE INDEX IF NOT EXISTS idx_cliente_ativo ON clientes(ativo);
