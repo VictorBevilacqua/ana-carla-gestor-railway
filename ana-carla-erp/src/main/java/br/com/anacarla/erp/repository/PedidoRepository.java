@@ -16,6 +16,8 @@ import java.util.UUID;
 @Repository
 public interface PedidoRepository extends JpaRepository<Pedido, UUID> {
 
+    boolean existsByCliente_Id(UUID clienteId); 
+
     List<Pedido> findByStatusOrderByDataCriacaoDesc(StatusPedido status);
 
     Page<Pedido> findByClienteIdOrderByDataCriacaoDesc(UUID clienteId, Pageable pageable);
