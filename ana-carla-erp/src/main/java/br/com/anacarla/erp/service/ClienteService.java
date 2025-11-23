@@ -100,7 +100,7 @@ public class ClienteService {
         return clienteMapper.toMetricasDTO(cliente);
     }
 
-    ppublic void deletar(UUID id) {
+    public void deletar(UUID id) {
     log.info("Deletando cliente: {}", id);
 
     if (!clienteRepository.existsById(id)) {
