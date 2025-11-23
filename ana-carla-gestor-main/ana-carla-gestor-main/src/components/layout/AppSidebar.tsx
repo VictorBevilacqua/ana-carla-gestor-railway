@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/sidebar";
 
 const menuItems = [
-  { title: "Painel", url: "/", icon: Home },
+  { title: "Painel", url: "/dashboard", icon: Home },
   { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },
   { title: "Clientes", url: "/clientes", icon: Users },
   { title: "Cardápio", url: "/cardapio", icon: UtensilsCrossed },
