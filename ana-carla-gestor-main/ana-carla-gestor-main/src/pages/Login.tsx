@@ -81,11 +81,6 @@ export default function Login() {
               {loading ? 'Entrando...' : 'Entrar'}
             </Button>
 
-            <div className="text-xs text-center text-muted-foreground space-y-1">
-              <p>Credenciais padrão:</p>
-              <p>Email: <code className="bg-muted px-1 py-0.5 rounded">admin@anacarla.com.br</code></p>
-              <p>Senha: <code className="bg-muted px-1 py-0.5 rounded">admin123</code></p>
-            </div>
           </form>
         </CardContent>
       </Card>
