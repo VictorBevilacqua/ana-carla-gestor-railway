@@ -100,12 +100,20 @@ public class ClienteService {
         return clienteMapper.toMetricasDTO(cliente);
     }
 
-    public void deletar(UUID id) {
-        log.info("Deletando cliente: {}", id);
-        if (!clienteRepository.existsById(id)) {
-            throw new IllegalArgumentException("Cliente não encontrado");
-        }
-        clienteRepository.deleteById(id);
+    ppublic void deletar(UUID id) {
+    log.info("Deletando cliente: {}", id);
+
+    if (!clienteRepository.existsById(id)) {
+        throw new IllegalArgumentException("Cliente não encontrado");
+    }
+
+    if (pedidoRepository.existsByCliente_Id(id)) {
+        throw new IllegalStateException(
+            "Não é possível excluir o cliente: existem pedidos associados a este cliente."
+        );
+    }
+
+    clienteRepository.deleteById(id);
     }
 }
 
